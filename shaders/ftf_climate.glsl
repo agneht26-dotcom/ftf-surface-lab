@@ -21,20 +21,23 @@ float climateEdgeNoise(vec2 p,uint seed){
     for(int i=0;i<oct;++i){float signalValue=type==2u?ftfPerlin8(p,uint(i)):ftfSimplexScaled(p,seed+uint(i),type==1u?99.83685:79.869484);sum+=signalValue*amp;bound+=signal*amp;p*=graph.climateEdge.z;amp*=graph.climateEdge.w;}
     return ftfMap(sum,-bound,bound)-.5;
 }
-vec3 climateRegion(vec2 world,out vec2 position,out vec2 regionCenter){
+#include "ftf_region_cells.glsl"
+vec3 climateRegion(vec2 world,out vec2 position,out vec2 regionCenter,out ivec2 regionCell){
     precise vec2 warp=vec2(worldSimplex(world,graph.climateSeeds0.y,int(graph.climateShape.y),2,false)-.5,worldSimplex(world,graph.climateSeeds0.z,int(graph.climateShape.y),2,false)-.5)*graph.climateShape.z;
     position=(world+warp)*worldDiv(1.0,graph.climateShape.x);
     ivec2 base=ivec2(worldFloor(position.x),worldFloor(position.y)),winner=base;vec2 center=position;precise float first=999999.0,second=999999.0;
     for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x){ivec2 cell=base+ivec2(x,y);precise vec2 point=vec2(cell)+FTF_CELLS[ftfHash(graph.climateSeeds0.x,cell)&255u];precise vec2 delta=point-position;precise float dist=delta.x*delta.x+delta.y*delta.y;if(dist<first){second=first;first=dist;winner=cell;center=point;}else if(dist<second)second=dist;}
-    regionCenter=center;
+    regionCenter=center;regionCell=winner;
     precise float edge=1.0-ftfMap(worldDiv(first,second)-1.0,-1.0,0.0);
     // Macro region variation is used only by the preview palette.
     vec2 macroPoint=center*worldDiv(1.0,graph.climateShape.w);ivec2 mbase=ivec2(worldFloor(macroPoint.x),worldFloor(macroPoint.y)),mwinner=mbase;float nearest=999999.0;
     for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x){ivec2 cell=mbase+ivec2(x,y);vec2 point=vec2(cell)+FTF_CELLS[ftfHash(graph.climateSeeds2.z,cell)&255u];vec2 delta=point-macroPoint;float dist=dot(delta,delta);if(dist<nearest){nearest=dist;mwinner=cell;}}
     return vec3(edge,ftfMap(ftfVal(graph.climateSeeds2.z,mwinner),-1.0,1.0),ftfMap(ftfVal(graph.climateSeeds0.x,winner),-1.0,1.0));
 }
-vec2 ftfClimate(vec2 world,float height,uint cellIndex,out vec2 regions){
-    vec2 position,center;vec3 region=climateRegion(world,position,center);float edge=region.x;
+// regionCell: Cell.biomeRegionX/Z, the winner of the last region call (the edge or mountain-chain re-call when it runs); chunk
+// biome fill passes it to FTF's provider and the replacement layer region selection (MixinNoiseBasedChunkGenerator resolveBiomeInCell).
+vec2 ftfClimate(vec2 world,float height,uint cellIndex,out vec2 regions,out ivec2 regionCell){
+    vec2 position,center;vec3 region=climateRegion(world,position,center,regionCell);float edge=region.x;
     uint type=cells[cellIndex].terrain&255u;
     if(type<=2u||type==6u||type==8u||type==11u){vec2 worldCenter=vec2(worldFloor(worldDiv(center.x,worldDiv(1.0,graph.climateShape.x))),worldFloor(worldDiv(center.y,worldDiv(1.0,graph.climateShape.x))));float coastMarker=graph.controlPoints.z+(graph.controlPoints.w-graph.controlPoints.z)/2.0;
         if(ftfUplift(worldCenter).x<=coastMarker){type=6u;cells[cellIndex].terrain=(cells[cellIndex].terrain&~255u)|type;}}
@@ -43,7 +46,7 @@ vec2 ftfClimate(vec2 world,float height,uint cellIndex,out vec2 regions){
     if(height>worldDiv(min(graph.worldLevels.z-1.0,graph.worldLevels.w),graph.worldLevels.w)&&(edge<.4||type==2u)){
         precise float modifier=1.0-ftfMap(edge,0.0,.4),distance=graph.climateEffects.w*modifier;
         precise vec2 offset=vec2(climateEdgeNoise(world,graph.climateSeeds0.w),climateEdgeNoise(world,graph.climateSeeds1.x))*distance;
-        region=climateRegion(world+offset,position,center);
+        region=climateRegion(world+offset,position,center,regionCell);
     }
     regions=region.yz;
     precise float biomeFrequency=worldDiv(1.0,graph.climateShape.x);

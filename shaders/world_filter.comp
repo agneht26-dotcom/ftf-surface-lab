@@ -28,14 +28,19 @@ void main(){
     uvec2 q=gl_GlobalInvocationID.xy;uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;uint index=q.y*n+q.x;
     precise vec2 fraction=vec2(dvec2(q)/double(n-1)),world=(fraction-.5)*p.domain.x+p.domain.yz;
     // FTF 1.0.0010 tile filters sample their noise at Tile.getBlockX() + array index; the array starts one 32-block border
-    // before the tile, so every noise position is the block's own + (32, 32). Later versions: not verified, kept unshifted.
+    // before the tile, so every noise position is the block's own + (32, 32).
+    // FTF 1.0.0013+ (ChunkFilterGrid) samples at the block's own position (getBlockX = window start, index from there); checked against
+    // the 1.0.0013 classes (tools/verify_filters_14_chunks.py), which also show its per-chunk 40 x 40 windows equal one whole-grid pass.
     vec2 noiseWorld=graph.filterMeta2.x==0u?world+vec2(32.0):world;
+    // Cliff relaxation seed: 1.0.0010 builds both passes from one factory (salt 0); 1.0.0013+ TerrainFilters uses salt 1 before
+    // erosion and salt 2 after it (root + 7919 + salt * 31337). The second pass runs with domain.w = 8.
+    uint relaxSeed=graph.filterMeta2.x==0u?graph.filterMeta.z:graph.filterMeta.z+(p.domain.w>0.0?2u:1u)*31337u;
     vec2 point=vec2(q);float block=worldDiv(float(n-1),p.domain.x),factor=graph.worldLevels.w,wh=graph.filter3.z;
     if(PHASE==6u){imageStore(rawField,ivec2(q),imageLoad(intermediate,ivec2(q)));return;}
     if(PHASE<=1u||PHASE==8u){bool source=PHASE==1u;vec4 field=at(ivec2(q),source);float c=worldDiv(field.x,factor),m=PHASE==8u?modifierAt(index,c,world):cells[index].gateMin;
         if(PHASE==8u)cells[index].gateMin=m;
         if(m!=0.0){float l=normHeight(point-vec2(block,0),source),r=normHeight(point+vec2(block,0),source),d=normHeight(point-vec2(0,block),source),u=normHeight(point+vec2(0,block),source),avg=.25*(l+r+d+u),hi=max(max(c,l),max(max(r,d),u)),lo=min(min(c,l),min(min(r,d),u));
-            float rateMul=1.0+.5*filterCentered(noiseWorld,graph.filterMeta.z),reliefMul=1.0+.35*filterCentered(noiseWorld,graph.filterMeta.z+6007u),minRelief=worldDiv(3.0,wh),span=max(.00001,worldDiv(8.0,wh)-minRelief),t=clamp(worldDiv(hi-lo-minRelief*reliefMul,span*reliefMul),0.0,1.0),mask=t*t*(3.0-2.0*t),rate=min(.5,.4*rateMul);field.x=(c+m*((avg-c)*mask*rate))*factor;}
+            float rateMul=1.0+.5*filterCentered(noiseWorld,relaxSeed),reliefMul=1.0+.35*filterCentered(noiseWorld,relaxSeed+6007u),minRelief=worldDiv(3.0,wh),span=max(.00001,worldDiv(8.0,wh)-minRelief),t=clamp(worldDiv(hi-lo-minRelief*reliefMul,span*reliefMul),0.0,1.0),mask=t*t*(3.0-2.0*t),rate=min(.5,.4*rateMul);field.x=(c+m*((avg-c)*mask*rate))*factor;}
         if(source)imageStore(rawField,ivec2(q),field);else imageStore(intermediate,ivec2(q),field);return;
     }
     if(PHASE==2u){float c=normHeight(point,false),l=normHeight(point-vec2(block,0),false),r=normHeight(point+vec2(block,0),false),d=normHeight(point-vec2(0,block),false),u=normHeight(point+vec2(0,block),false);

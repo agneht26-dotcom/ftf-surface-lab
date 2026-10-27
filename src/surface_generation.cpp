@@ -79,8 +79,11 @@ bool Surface::generateWork(VkCommandBuffer cmd,uint32_t frameIndex,const Terrain
         }else if(stage==GenerationStage::Climate)action(3);
         else if(stage==GenerationStage::Filters)action(4);
         if(p.meta.z==5&&stage<=GenerationStage::Climate){++stageRuns[1];if(seeds.climateMeta.x)add(buildClimate,grid,grid,32);if(preFilter.handle)action(2);}
-        if(p.meta.z==5&&stage<=GenerationStage::Filters){++stageRuns[2];if(seeds.filterMeta.x)for(uint32_t phase:{8u,1u,0u,6u,2u,3u,4u,8u,1u,0u,6u,7u,5u})add(worldFilters[phase],grid,grid,phase==4?16:64);}
+        if(p.meta.z==5&&stage<=GenerationStage::Filters){++stageRuns[2];if(seeds.filterMeta.x){const uint32_t phases[]={8u,1u,0u,6u,2u,3u,4u,8u,1u,0u,6u,7u,5u};for(int i=0;i<13;++i){add(worldFilters[phases[i]],grid,grid,phases[i]==4?16:64);if(i>=7&&i<=9)workSteps.back().row=1;}}}   // row 1 (domain.w 8): the second cliff relaxation, which has its own seed in FTF 1.0.0013+
         // The biome + block pass is ~90% of a build (~0.95 s at 2048): progressive builds run it in bands of biomeBandGroups x 8 rows (~2-4 ms each at 2048) under the frame budget.
+        // Corner pre-pass first (block view at sample spacing <= 4 blocks): the block pass then reads its 4 corner levels per column.
+        const uint32_t cornerGroups=(uint32_t(p.domain.x/16.0f)+5+7)/8;const bool corners=seeds.biomeSeeds2.w==3u&&p.domain.x<=4.0f*float(p.meta.x-1)&&cornerGroups*8<=1024;
+        if(p.meta.z==5&&seeds.climateMeta.x&&corners)add(buildCorners,cornerGroups,cornerGroups);
         if(p.meta.z==5&&seeds.climateMeta.x){if(stage<=GenerationStage::Biomes){++stageRuns[3];if(progressiveGeneration&&biomeBandGroups)for(uint32_t r=0;r<grid;r+=biomeBandGroups)workSteps.push_back({buildBiomes,grid,std::min(biomeBandGroups,grid-r),16,0,r});else add(buildBiomes,grid,grid);}else{++stageRuns[4];add(buildRecolor,grid,grid);}}
         if(stage<=GenerationStage::Filters)add(filter,grid,grid,64);
     }
@@ -109,16 +112,15 @@ void Surface::exchangeTerrain(Surface& o){
     // promotion wait protects descriptor updates; ordinary refinement doesn't wait.
     vkCheck(vkDeviceWaitIdle(gpu.device));using std::swap;
     swap(resolution,o.resolution);swap(indexCount,o.indexCount);swap(patchCells,o.patchCells);swap(patchCount,o.patchCount);swap(lodFirst,o.lodFirst);swap(lodCount,o.lodCount);swap(fieldBytes,o.fieldBytes);swap(fieldRevision,o.fieldRevision);swap(lastParams,o.lastParams);swap(lastGenerationStage,o.lastGenerationStage);swap(mountainCacheSamples,o.mountainCacheSamples);
-    swap(indices,o.indices);swap(graphSeeds,o.graphSeeds);swap(mountainCache,o.mountainCache);swap(cellState,o.cellState);swap(riverNetworks,o.riverNetworks);swap(riverWords,o.riverWords);swap(exactNoise,o.exactNoise);swap(exactNoiseKey,o.exactNoiseKey);swap(exactNoiseValid,o.exactNoiseValid);swap(riverEpoch,o.riverEpoch);swap(hasRivers,o.hasRivers);swap(biomeTable,o.biomeTable);swap(effectsBuffer,o.effectsBuffer);swap(inspectionBuffer,o.inspectionBuffer);swap(rawField,o.rawField);swap(field,o.field);swap(colors,o.colors);swap(fields,o.fields);
+    swap(indices,o.indices);swap(graphSeeds,o.graphSeeds);swap(mountainCache,o.mountainCache);swap(cellState,o.cellState);swap(regionCells,o.regionCells);swap(riverNetworks,o.riverNetworks);swap(riverWords,o.riverWords);swap(exactNoise,o.exactNoise);swap(exactNoiseKey,o.exactNoiseKey);swap(exactNoiseValid,o.exactNoiseValid);swap(cornerLevels,o.cornerLevels);swap(riverEpoch,o.riverEpoch);swap(hasRivers,o.hasRivers);swap(biomeTable,o.biomeTable);swap(effectsBuffer,o.effectsBuffer);swap(inspectionBuffer,o.inspectionBuffer);swap(rawField,o.rawField);swap(field,o.field);swap(colors,o.colors);swap(fields,o.fields);
     swap(preClimate,o.preClimate);swap(preFilter,o.preFilter);swap(preClimateCells,o.preClimateCells);swap(preFilterCells,o.preFilterCells);swap(inputsValid,o.inputsValid);swap(preClimateValid,o.preClimateValid);swap(preFilterValid,o.preFilterValid);swap(completedInputs,o.completedInputs);
-    workActive=o.workActive=false;workSteps.clear();o.workSteps.clear();treeKeyValid=false;
-    if(treeInstances.handle){VkDescriptorBufferInfo infos[4]{{treeInstances.handle,0,treeInstances.size},{treeArgs.handle,0,treeArgs.size},{treeMesh.handle,0,treeMesh.size},{treeTable.handle,0,treeTable.size}};VkWriteDescriptorSet w[4]{};for(uint32_t i=0;i<4;++i){w[i].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w[i].dstSet=fields;w[i].dstBinding=11+i;w[i].descriptorCount=1;w[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;w[i].pBufferInfo=&infos[i];}vkUpdateDescriptorSets(gpu.device,4,w,0,nullptr);}
+    workActive=o.workActive=false;workSteps.clear();o.workSteps.clear();
 }
 std::string Surface::stepName(VkPipeline p)const{
     const Surface& o=pipelineOwner?*pipelineOwner:*this;
     for(size_t i=0;i<o.generate.size();++i)if(p==o.generate[i])return "terrain variant "+std::to_string(i);
     for(size_t i=0;i<worldFilters.size();++i)if(p==worldFilters[i])return "world filter "+std::to_string(i);
-    const std::pair<VkPipeline,const char*> named[]={{filter,"final filter"},{buildMountainCache,"mountain cache"},{buildMountainSegments,"mountain segments"},{buildWorldMap,"world map"},{buildOceanFloor,"ocean floor"},{buildIslandSurface,"island surface"},{buildClimate,"climate"},{buildRivers,"rivers"},{buildBiomes,"biomes"},{buildRecolor,"recolour"},{buildInspection,"inspection"}};
+    const std::pair<VkPipeline,const char*> named[]={{filter,"final filter"},{buildMountainCache,"mountain cache"},{buildMountainSegments,"mountain segments"},{buildWorldMap,"world map"},{buildOceanFloor,"ocean floor"},{buildIslandSurface,"island surface"},{buildClimate,"climate"},{buildRivers,"rivers"},{buildBiomes,"biomes"},{buildCorners,"surface corners"},{buildRecolor,"recolour"},{buildInspection,"inspection"}};
     for(auto& n:named)if(p==n.first)return n.second;
     return "other";
 }

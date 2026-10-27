@@ -1,7 +1,6 @@
 #include "surface.hpp"
 #include "ftf_sin_table.hpp"
 #include <imgui_impl_vulkan.h>
-#include "trees.hpp"
 #include "world.hpp"
 #include <algorithm>
 #include <cstring>
@@ -72,6 +71,7 @@ void Surface::initialize(Surface* shared,std::function<void(uint32_t,uint32_t)> 
     effectsBuffer=gpu.buffer(sizeof(EffectsBlock),VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     sinTable=gpu.buffer(sizeof(ftfSinBits),VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);{void* sinData{};vkCheck(vkMapMemory(gpu.device,sinTable.memory,0,sizeof(ftfSinBits),0,&sinData));std::memcpy(sinData,ftfSinBits,sizeof(ftfSinBits));vkUnmapMemory(gpu.device,sinTable.memory);}
     exactNoise=gpu.buffer(exactNoiseCapacity*4,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);exactNoiseValid=false;
+    cornerLevels=gpu.buffer(cornerCapacity*4,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     {auto exactPath=gpu.shaderRoot.parent_path()/"assets"/"mod-exact-surface-rules.json";std::ifstream exactInput(exactPath);exactNoiseSpecs.clear();exactGradients.clear();   // normal edition only; absent in the shareable edition
         if(exactInput){nlohmann::json exact;exactInput>>exact;for(const auto& n:exact.at("noises"))exactNoiseSpecs.push_back({n.at("name").get<std::string>(),n.at("firstOctave").get<int>(),n.at("amplitudes").get<std::vector<double>>()});exactGradients=exact.at("gradients").get<std::vector<std::string>>();}}
     inspectionBuffer=gpu.buffer(sizeof(SurfaceInspection)+32*4,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -79,11 +79,11 @@ void Surface::initialize(Surface* shared,std::function<void(uint32_t,uint32_t)> 
         sharedPipelines=true;pipelineOwner=shared->pipelineOwner?shared->pipelineOwner:shared;layout=shared->layout;computeLayout=shared->computeLayout;drawLayout=shared->drawLayout;
         generate=shared->generate;worldFilters=shared->worldFilters;filter=shared->filter;drawPipeline=shared->drawPipeline;drawPipelineCulled=shared->drawPipelineCulled;
         buildMountainCache=shared->buildMountainCache;buildMountainSegments=shared->buildMountainSegments;buildWorldMap=shared->buildWorldMap;
-        buildOceanFloor=shared->buildOceanFloor;buildIslandSurface=shared->buildIslandSurface;buildClimate=shared->buildClimate;buildRivers=shared->buildRivers;buildBiomes=shared->buildBiomes;buildRecolor=shared->buildRecolor;buildInspection=shared->buildInspection;
+        buildOceanFloor=shared->buildOceanFloor;buildIslandSurface=shared->buildIslandSurface;buildClimate=shared->buildClimate;buildRivers=shared->buildRivers;buildBiomes=shared->buildBiomes;buildRecolor=shared->buildRecolor;buildInspection=shared->buildInspection;buildCorners=shared->buildCorners;
         atmosphereLayout=shared->atmosphereLayout;atmospherePipeline=shared->atmospherePipeline;inputLayout=shared->inputLayout;
         renderPass=shared->renderPass;sampler=shared->sampler;return;
     }
-    VkDescriptorSetLayoutBinding bindings[17]{};
+    VkDescriptorSetLayoutBinding bindings[15]{};
     for(uint32_t i=0;i<3;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_COMPUTE_BIT|VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;}
     bindings[3]={3,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
     bindings[4]={4,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
@@ -93,13 +93,11 @@ void Surface::initialize(Surface* shared,std::function<void(uint32_t,uint32_t)> 
     VkDescriptorSetLayoutCreateInfo lc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};bindings[8]={8,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
     bindings[9]={9,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
     bindings[10]={10,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
-    bindings[11]={11,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT|VK_SHADER_STAGE_VERTEX_BIT,nullptr};
-    bindings[12]={12,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
-    bindings[13]={13,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,nullptr};
-    bindings[14]={14,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
-    bindings[15]={15,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
-    bindings[16]={16,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
-    lc.bindingCount=17;lc.pBindings=bindings;
+    bindings[11]={15,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};   // 11-14 were the tree buffers (trees removed in 1.10)
+    bindings[12]={16,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
+    bindings[13]={17,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
+    bindings[14]={18,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
+    lc.bindingCount=15;lc.pBindings=bindings;
     vkCheck(vkCreateDescriptorSetLayout(gpu.device,&lc,nullptr,&layout));
     VkPushConstantRange cr{VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(TerrainParams)};
     VkPipelineLayoutCreateInfo pc{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};pc.setLayoutCount=1;pc.pSetLayouts=&layout;pc.pushConstantRangeCount=1;pc.pPushConstantRanges=&cr;
@@ -156,7 +154,7 @@ void Surface::initialize(Surface* shared,std::function<void(uint32_t,uint32_t)> 
     createCompute("island_surface.comp.spv",buildIslandSurface,-1);
     createCompute("climate.comp.spv",buildClimate,-1);
     createCompute("rivers.comp.spv",buildRivers,-1);
-    createCompute("biomes.comp.spv",buildBiomes,-1);createCompute("biomes.comp.spv",buildRecolor,-3);createCompute("biomes.comp.spv",buildInspection,-2);
+    createCompute("biomes.comp.spv",buildBiomes,-1);createCompute("biomes.comp.spv",buildRecolor,-3);createCompute("biomes.comp.spv",buildInspection,-2);createCompute("biomes.comp.spv",buildCorners,-4);
     for(uint32_t i=0;i<worldFilters.size();++i)createCompute("world_filter.comp.spv",worldFilters[i],static_cast<int>(i),true);
     jobs.push_back({"terrain.vert+frag",[this]{
     auto vertex=gpu.shader("terrain.vert.spv");auto fragment=gpu.shader("terrain.frag.spv");
@@ -192,8 +190,6 @@ void Surface::initialize(Surface* shared,std::function<void(uint32_t,uint32_t)> 
     gp.pViewportState=&vp;gp.pRasterizationState=&rs;gp.pMultisampleState=&ms;gp.pDepthStencilState=&ds;gp.pColorBlendState=&cb;gp.pDynamicState=&dy;gp.layout=atmosphereLayout;gp.renderPass=renderPass;gp.subpass=1;
     vkCheck(vkCreateGraphicsPipelines(gpu.device,gpu.pipelineCache,1,&gp,nullptr,&atmospherePipeline));vkDestroyShaderModule(gpu.device,vertex,nullptr);vkDestroyShaderModule(gpu.device,fragment,nullptr);
     }});
-    initializeTrees();
-    if(treeInstances.handle)jobs.push_back({"tree pipelines",[this]{buildTreePipelines();}});
     // The terrain variants dominate a cold shader-cache start; compile everything on all cores while the caller shows progress.
     runPipelineJobs(jobs,progress);
     for(auto& entry:modules)vkDestroyShaderModule(gpu.device,entry.second,nullptr);
@@ -206,7 +202,7 @@ void Surface::buildCompute(VkShaderModule module,VkPipeline& pipeline,int varian
         const uint32_t specialization[]={filterStage?static_cast<uint32_t>(variant):variant==15?6u:variant>=13?5u:variant>=11?4u:variant==10?3u:(variant>=2?2u:static_cast<uint32_t>(variant)),variant>=2&&variant<10?static_cast<uint32_t>(variant-2):0u,(variant!=12&&variant!=14)?1u:0u};
         const VkSpecializationMapEntry entries[]={{0,0,4},{1,4,4},{2,8,4}};
         const VkSpecializationInfo info{3,entries,sizeof(specialization),specialization};if(variant>=0)cp.stage.pSpecializationInfo=&info;
-        uint32_t inspectValue=1;VkSpecializationMapEntry inspectEntry{3,0,4};VkSpecializationInfo inspectInfo{1,&inspectEntry,4,&inspectValue};if(variant==-3)inspectEntry.constantID=4;if(variant==-2||variant==-3)cp.stage.pSpecializationInfo=&inspectInfo;
+        uint32_t inspectValue=1;VkSpecializationMapEntry inspectEntry{3,0,4};VkSpecializationInfo inspectInfo{1,&inspectEntry,4,&inspectValue};if(variant==-3)inspectEntry.constantID=4;if(variant==-4)inspectEntry.constantID=5;if(variant<=-2&&variant>=-4)cp.stage.pSpecializationInfo=&inspectInfo;
         vkCheck(vkCreateComputePipelines(gpu.device,gpu.pipelineCache,1,&cp,nullptr,&pipeline));
 }
 VkPipeline Surface::variantPipeline(uint32_t variant){
@@ -243,6 +239,7 @@ void Surface::ensure(uint32_t grid,uint32_t w,uint32_t h){
         field=gpu.image(grid,grid,VK_FORMAT_R32G32B32A32_SFLOAT,usage,VK_IMAGE_ASPECT_COLOR_BIT);
         colors=gpu.image(grid,grid,VK_FORMAT_R8G8B8A8_UNORM,usage,VK_IMAGE_ASPECT_COLOR_BIT);
         cellState=gpu.buffer(static_cast<VkDeviceSize>(grid)*grid*32,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        regionCells=gpu.buffer(static_cast<VkDeviceSize>(grid)*grid*4,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);   // binding 18: FTF biome-region cell per sample (climate.comp)
         fieldBytes=estimatedFieldBytes(grid);
         gpu.immediate([&](VkCommandBuffer cmd){VkImageMemoryBarrier barriers[3]{};VkImage handles[]={rawField.handle,field.handle,colors.handle};
             for(uint32_t i=0;i<3;++i){auto& b=barriers[i];b.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;b.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;b.newLayout=VK_IMAGE_LAYOUT_GENERAL;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=handles[i];b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};b.dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT;}
@@ -261,11 +258,8 @@ void Surface::ensure(uint32_t grid,uint32_t w,uint32_t h){
         VkDescriptorBufferInfo queryInfo{inspectionBuffer.handle,0,sizeof(SurfaceInspection)+32*4};effectWrite.dstBinding=10;effectWrite.pBufferInfo=&queryInfo;vkUpdateDescriptorSets(gpu.device,1,&effectWrite,0,nullptr);
         VkDescriptorBufferInfo sinInfo{sinTable.handle,0,sinTable.size};effectWrite.dstBinding=15;effectWrite.pBufferInfo=&sinInfo;vkUpdateDescriptorSets(gpu.device,1,&effectWrite,0,nullptr);
         VkDescriptorBufferInfo exactInfo{exactNoise.handle,0,exactNoise.size};effectWrite.dstBinding=16;effectWrite.pBufferInfo=&exactInfo;vkUpdateDescriptorSets(gpu.device,1,&effectWrite,0,nullptr);
-        if(treeInstances.handle){
-            VkDescriptorBufferInfo infos[4]{{treeInstances.handle,0,treeInstances.size},{treeArgs.handle,0,treeArgs.size},{treeMesh.handle,0,treeMesh.size},{treeTable.handle,0,treeTable.size}};const uint32_t bindingsToWrite[4]={11,12,13,14};
-            VkWriteDescriptorSet treeWrites[4]{};for(int i=0;i<4;++i){treeWrites[i].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;treeWrites[i].dstSet=fields;treeWrites[i].dstBinding=bindingsToWrite[i];treeWrites[i].descriptorCount=1;treeWrites[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;treeWrites[i].pBufferInfo=&infos[i];}
-            vkUpdateDescriptorSets(gpu.device,4,treeWrites,0,nullptr);
-        }
+        VkDescriptorBufferInfo cornerInfo{cornerLevels.handle,0,cornerLevels.size};effectWrite.dstBinding=17;effectWrite.pBufferInfo=&cornerInfo;vkUpdateDescriptorSets(gpu.device,1,&effectWrite,0,nullptr);
+        VkDescriptorBufferInfo regionInfo{regionCells.handle,0,regionCells.size};effectWrite.dstBinding=18;effectWrite.pBufferInfo=&regionInfo;vkUpdateDescriptorSets(gpu.device,1,&effectWrite,0,nullptr);
         bindCoarse(*this);
     }
     frames.resize(gpu.swap.ImageCount);
@@ -312,11 +306,10 @@ void Surface::record(VkCommandBuffer cmd,uint32_t frameIndex,const TerrainParams
     // Update display controls every frame, independently of terrain generation.
     VkMemoryBarrier effectsBarrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};effectsBarrier.srcAccessMask=VK_ACCESS_SHADER_READ_BIT;effectsBarrier.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
     vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&effectsBarrier,0,nullptr,0,nullptr);
-    EffectsBlock display{effects,screenFocus,viewportSize,sun,sunShadow,terrainMask,biomeSearchArea,scaleCue,detailHole,atmosphere.water,atmosphere.fog,atmosphere.cloud,atmosphere.cloud2};vkCmdUpdateBuffer(cmd,effectsBuffer.handle,0,sizeof(display),&display);
+    EffectsBlock display{effects,screenFocus,viewportSize,sun,sunShadow,terrainMask,scaleCue,detailHole,atmosphere.water,atmosphere.fog,atmosphere.cloud,atmosphere.cloud2};vkCmdUpdateBuffer(cmd,effectsBuffer.handle,0,sizeof(display),&display);
     effectsBarrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;effectsBarrier.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
     vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,1,&effectsBarrier,0,nullptr,0,nullptr);
     if(generateOnly){stamp(3,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);f.recorded=true;f.generated=compute;f.revision=revision;return;}
-    placeTrees(cmd,params,revision);
     VkClearValue clear[3]{};clear[2].color={{.060f,.085f,.105f,1}};clear[1].depthStencil={1,0};
     VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};rp.renderPass=renderPass;rp.framebuffer=f.framebuffer;rp.renderArea.extent={width,height};rp.clearValueCount=3;rp.pClearValues=clear;
     vkCmdBeginRenderPass(cmd,&rp,VK_SUBPASS_CONTENTS_INLINE);vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,drawPipeline);
@@ -329,7 +322,6 @@ void Surface::record(VkCommandBuffer cmd,uint32_t frameIndex,const TerrainParams
         detail->drawMesh(cmd,*detailDraw);
         if(detail->finerBand){vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,drawLayout,0,1,&detail->finerBand->fields,0,nullptr);detail->finerBand->drawMesh(cmd,detail->finerBandDraw);}
     }
-    drawTrees(cmd,params,draw);
     vkCmdNextSubpass(cmd,VK_SUBPASS_CONTENTS_INLINE);vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,atmospherePipeline);
     VkDescriptorSet atmosphereSets[2]={fields,f.inputs};vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,atmosphereLayout,0,2,atmosphereSets,0,nullptr);
     vkCmdPushConstants(cmd,atmosphereLayout,VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(Atmosphere::inverseVP)+3*sizeof(glm::vec4),&atmosphere.inverseVP);
@@ -384,122 +376,26 @@ void Surface::releaseFrames(){
 }
 void Surface::releaseFields(){
     if(fields)vkCheck(vkFreeDescriptorSets(gpu.device,gpu.descriptors,1,&fields));fields={};
-    gpu.release(preClimate);gpu.release(preFilter);gpu.release(preClimateCells);gpu.release(preFilterCells);inputsValid=preClimateValid=preFilterValid=workActive=false;workSteps.clear();gpu.release(rawField);gpu.release(field);gpu.release(colors);gpu.release(cellState);gpu.release(indices);fieldRevision=0;fieldBytes=0;
+    gpu.release(preClimate);gpu.release(preFilter);gpu.release(preClimateCells);gpu.release(preFilterCells);inputsValid=preClimateValid=preFilterValid=workActive=false;workSteps.clear();gpu.release(rawField);gpu.release(field);gpu.release(colors);gpu.release(cellState);gpu.release(regionCells);gpu.release(indices);fieldRevision=0;fieldBytes=0;
 }
 void Surface::destroy(){
     if(!gpu.device)return;vkDeviceWaitIdle(gpu.device);releaseFrames();releaseFields();
     for(auto& h:asyncHeights)gpu.release(h.staging);asyncHeights.clear();
-    gpu.release(graphSeeds);gpu.release(mountainCache);gpu.release(riverNetworks);gpu.release(effectsBuffer);gpu.release(inspectionBuffer);gpu.release(sinTable);gpu.release(exactNoise);
+    gpu.release(graphSeeds);gpu.release(mountainCache);gpu.release(riverNetworks);gpu.release(effectsBuffer);gpu.release(inspectionBuffer);gpu.release(sinTable);gpu.release(exactNoise);gpu.release(cornerLevels);
     if(sharedPipelines){gpu.release(biomeTable);return;}
     if(atmospherePipeline)vkDestroyPipeline(gpu.device,atmospherePipeline,nullptr);if(atmosphereLayout)vkDestroyPipelineLayout(gpu.device,atmosphereLayout,nullptr);if(inputLayout)vkDestroyDescriptorSetLayout(gpu.device,inputLayout,nullptr);
-    gpu.release(treeInstances);gpu.release(treeArgs);gpu.release(treeMesh);gpu.release(treeTable);
-    if(treePlacePipeline)vkDestroyPipeline(gpu.device,treePlacePipeline,nullptr);if(treeDrawPipeline)vkDestroyPipeline(gpu.device,treeDrawPipeline,nullptr);
-    if(treePlaceLayout)vkDestroyPipelineLayout(gpu.device,treePlaceLayout,nullptr);if(treeDrawLayout)vkDestroyPipelineLayout(gpu.device,treeDrawLayout,nullptr);
     if(buildMountainCache)vkDestroyPipeline(gpu.device,buildMountainCache,nullptr);
     if(buildMountainSegments)vkDestroyPipeline(gpu.device,buildMountainSegments,nullptr);
     if(buildWorldMap)vkDestroyPipeline(gpu.device,buildWorldMap,nullptr);
     if(buildOceanFloor)vkDestroyPipeline(gpu.device,buildOceanFloor,nullptr);
     if(buildIslandSurface)vkDestroyPipeline(gpu.device,buildIslandSurface,nullptr);
     if(buildRivers)vkDestroyPipeline(gpu.device,buildRivers,nullptr);
-    gpu.release(biomeTable);if(buildRecolor)vkDestroyPipeline(gpu.device,buildRecolor,nullptr);if(buildBiomes)vkDestroyPipeline(gpu.device,buildBiomes,nullptr);if(buildInspection)vkDestroyPipeline(gpu.device,buildInspection,nullptr);
+    gpu.release(biomeTable);if(buildRecolor)vkDestroyPipeline(gpu.device,buildRecolor,nullptr);if(buildBiomes)vkDestroyPipeline(gpu.device,buildBiomes,nullptr);if(buildInspection)vkDestroyPipeline(gpu.device,buildInspection,nullptr);if(buildCorners)vkDestroyPipeline(gpu.device,buildCorners,nullptr);
     if(buildClimate)vkDestroyPipeline(gpu.device,buildClimate,nullptr);
     for(auto pipeline:worldFilters)if(pipeline)vkDestroyPipeline(gpu.device,pipeline,nullptr);
     if(drawPipelineCulled)vkDestroyPipeline(gpu.device,drawPipelineCulled,nullptr);if(drawPipeline)vkDestroyPipeline(gpu.device,drawPipeline,nullptr);for(auto pipeline:generate)if(pipeline)vkDestroyPipeline(gpu.device,pipeline,nullptr);if(filter)vkDestroyPipeline(gpu.device,filter,nullptr);
     if(renderPass)vkDestroyRenderPass(gpu.device,renderPass,nullptr);if(sampler)vkDestroySampler(gpu.device,sampler,nullptr);
     if(drawLayout)vkDestroyPipelineLayout(gpu.device,drawLayout,nullptr);if(computeLayout)vkDestroyPipelineLayout(gpu.device,computeLayout,nullptr);if(layout)vkDestroyDescriptorSetLayout(gpu.device,layout,nullptr);
-}
-
-namespace {constexpr uint32_t treeSegmentCapacity=4096,treeBigSegmentCapacity=32768;
-    uint32_t treeSegmentBase(uint32_t segment){return segment<24?segment*treeBigSegmentCapacity:24*treeBigSegmentCapacity+(segment-24)*treeSegmentCapacity;}}
-void Surface::initializeTrees(){
-    auto tablePath=gpu.shaderRoot.parent_path()/"assets"/"trees-1.21.1.bin";std::ifstream tableInput(tablePath,std::ios::binary|std::ios::ate);
-    if(!tableInput)return; // older packages without the tree table simply have no trees
-    size_t tableBytes=static_cast<size_t>(tableInput.tellg());if(tableBytes<32||tableBytes>1024*1024)return;std::vector<char> tableData(tableBytes);tableInput.seekg(0);tableInput.read(tableData.data(),tableBytes);if(!tableInput)return;
-    auto meshes=buildTreeMeshes();treeFirst.assign(meshes.first.begin(),meshes.first.end());treeCount.assign(meshes.count.begin(),meshes.count.end());
-    auto modPath=gpu.shaderRoot.parent_path()/"assets"/"mod-tree-meshes.bin";
-    std::ifstream modInput(modPath,std::ios::binary|std::ios::ate);
-    if(modInput){size_t bytes=size_t(modInput.tellg());modInput.seekg(0);std::array<uint32_t,4> header{};modInput.read(reinterpret_cast<char*>(header.data()),16);
-        if(header[0]!=0x54524d32||header[1]>2048||bytes!=16ull+header[1]*16ull+header[2]*16ull)throw std::runtime_error("Invalid mod tree mesh data");
-        std::vector<uint32_t> ranges(header[1]*4);modInput.read(reinterpret_cast<char*>(ranges.data()),ranges.size()*4);uint32_t base=uint32_t(meshes.vertices.size());
-        for(uint32_t i=0;i<header[1];++i){treeFirst.push_back(base+ranges[i*4]);treeCount.push_back(ranges[i*4+1]);treeFirst.push_back(base+ranges[i*4+2]);treeCount.push_back(ranges[i*4+3]);}
-        meshes.vertices.resize(base+header[2]);modInput.read(reinterpret_cast<char*>(meshes.vertices.data()+base),header[2]*16ull);if(!modInput)throw std::runtime_error("Truncated mod tree meshes");
-    }treeDrawTypeCount=uint32_t(treeFirst.size()/2);for(auto v:meshes.vertices)treeCullRadius=std::max(treeCullRadius,std::max({std::abs(v.x),std::abs(v.y),std::abs(v.z)})*2.0f);
-    const VkMemoryPropertyFlags hostVisible=VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    treeTable=gpu.buffer(tableBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,hostVisible);void* mapped{};vkCheck(vkMapMemory(gpu.device,treeTable.memory,0,tableBytes,0,&mapped));std::memcpy(mapped,tableData.data(),tableBytes);vkUnmapMemory(gpu.device,treeTable.memory);
-    VkDeviceSize meshBytes=meshes.vertices.size()*sizeof(glm::vec4);treeMesh=gpu.buffer(meshBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,hostVisible);
-    vkCheck(vkMapMemory(gpu.device,treeMesh.memory,0,meshBytes,0,&mapped));std::memcpy(mapped,meshes.vertices.data(),meshBytes);vkUnmapMemory(gpu.device,treeMesh.memory);
-    treeInstances=gpu.buffer((VkDeviceSize(24)*treeBigSegmentCapacity+VkDeviceSize(treeDrawTypeCount*2-24)*treeSegmentCapacity)*32,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    treeArgs=gpu.buffer(treeDrawTypeCount*2*20,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    // Start with empty draws so a frame that draws before the first placement shows nothing.
-    std::vector<uint32_t> zero(treeDrawTypeCount*2*4);gpu.immediate([&](VkCommandBuffer cmd){vkCmdUpdateBuffer(cmd,treeArgs.handle,0,zero.size()*4,zero.data());});
-}
-void Surface::buildTreePipelines(){
-    VkPushConstantRange placeRange{VK_SHADER_STAGE_COMPUTE_BIT,0,128};VkDescriptorSetLayout sets[3]={layout,layout,layout};   /* base, patch, intermediate ring */
-    VkPipelineLayoutCreateInfo plc{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};plc.setLayoutCount=3;plc.pSetLayouts=sets;plc.pushConstantRangeCount=1;plc.pPushConstantRanges=&placeRange;
-    vkCheck(vkCreatePipelineLayout(gpu.device,&plc,nullptr,&treePlaceLayout));
-    VkShaderModule placeModule=gpu.shader("tree_place.comp.spv");
-    VkComputePipelineCreateInfo cp{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};cp.layout=treePlaceLayout;cp.stage.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;cp.stage.stage=VK_SHADER_STAGE_COMPUTE_BIT;cp.stage.module=placeModule;cp.stage.pName="main";
-    vkCheck(vkCreateComputePipelines(gpu.device,gpu.pipelineCache,1,&cp,nullptr,&treePlacePipeline));vkDestroyShaderModule(gpu.device,placeModule,nullptr);
-    VkPushConstantRange drawRange{VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,96};plc.setLayoutCount=1;plc.pushConstantRangeCount=1;plc.pPushConstantRanges=&drawRange;
-    vkCheck(vkCreatePipelineLayout(gpu.device,&plc,nullptr,&treeDrawLayout));
-    auto vertex=gpu.shader("tree.vert.spv");auto fragment=gpu.shader("tree.frag.spv");
-    VkPipelineShaderStageCreateInfo stages[2]{};for(auto& stage:stages){stage.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;stage.pName="main";}
-    stages[0].stage=VK_SHADER_STAGE_VERTEX_BIT;stages[0].module=vertex;stages[1].stage=VK_SHADER_STAGE_FRAGMENT_BIT;stages[1].module=fragment;
-    VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-    VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    VkPipelineViewportStateCreateInfo vp{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};vp.viewportCount=1;vp.scissorCount=1;
-    VkPipelineRasterizationStateCreateInfo rs{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};rs.polygonMode=VK_POLYGON_MODE_FILL;rs.cullMode=VK_CULL_MODE_NONE;rs.frontFace=VK_FRONT_FACE_COUNTER_CLOCKWISE;rs.lineWidth=1;
-    VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};ms.rasterizationSamples=VK_SAMPLE_COUNT_1_BIT;
-    VkPipelineDepthStencilStateCreateInfo ds{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};ds.depthTestEnable=VK_TRUE;ds.depthWriteEnable=VK_TRUE;ds.depthCompareOp=VK_COMPARE_OP_LESS;
-    VkPipelineColorBlendAttachmentState blend{};blend.colorWriteMask=0xf;
-    VkPipelineColorBlendStateCreateInfo cb{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};cb.attachmentCount=1;cb.pAttachments=&blend;
-    VkDynamicState dynamic[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};VkPipelineDynamicStateCreateInfo dy{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};dy.dynamicStateCount=2;dy.pDynamicStates=dynamic;
-    VkGraphicsPipelineCreateInfo gp{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};gp.stageCount=2;gp.pStages=stages;gp.pVertexInputState=&vi;gp.pInputAssemblyState=&ia;
-    gp.pViewportState=&vp;gp.pRasterizationState=&rs;gp.pMultisampleState=&ms;gp.pDepthStencilState=&ds;gp.pColorBlendState=&cb;gp.pDynamicState=&dy;gp.layout=treeDrawLayout;gp.renderPass=renderPass;
-    vkCheck(vkCreateGraphicsPipelines(gpu.device,gpu.pipelineCache,1,&gp,nullptr,&treeDrawPipeline));vkDestroyShaderModule(gpu.device,vertex,nullptr);vkDestroyShaderModule(gpu.device,fragment,nullptr);
-}
-void Surface::placeTrees(VkCommandBuffer cmd,const TerrainParams& params,uint64_t revision){
-    if(!trees.enabled||!treePlacePipeline||!treeInstances.handle)return;
-    const float radius=std::max(50.0f,trees.radius),cellSize=trees.wholeMap?std::max(4.0f,radius*2.0f/640.0f):4.0f;const float snap=cellSize*4;
-    glm::vec2 center=glm::round(trees.center/snap)*snap;
-    const bool hasDetail=treeDetail&&treeDetail->fields&&treeDetail->resolution>0&&treeDetailRadius>0;const bool hasRing=hasDetail&&treeRing&&treeRing->fields&&treeRing->resolution>0;
-    struct Key {float window[4];float base[4];float detail[4];float world[4];uint32_t meta[4];float patch[4];float view[4];float ring[4];uint64_t revision,detailRevision,ringRevision;}key{};
-    key.window[0]=center.x;key.window[1]=center.y;key.window[2]=radius;key.window[3]=cellSize;
-    key.base[0]=params.domain.x;key.base[1]=params.domain.y;key.base[2]=params.domain.z;key.base[3]=float(resolution);
-    if(hasDetail){key.detail[0]=treeDetailParams.domain.x;key.detail[1]=treeDetailParams.domain.y;key.detail[2]=treeDetailParams.domain.z;key.detail[3]=float(treeDetail->resolution);key.patch[0]=treeDetailRadius;key.detailRevision=treeDetail->fieldRevision;}
-    if(hasRing){key.ring[0]=treeRingParams.domain.x;key.ring[1]=treeRingParams.domain.y;key.ring[2]=treeRingParams.domain.z;key.ring[3]=float(treeRing->resolution);key.ringRevision=treeRing->fieldRevision;}   // trees in the ring zone sit on the ring's finer surface (base heights buried or floated them)
-    key.world[0]=params.land.z;key.world[1]=params.ftfScales.w;key.world[2]=trees.density;key.world[3]=std::min(trees.lodDistance,radius);
-    key.meta[0]=trees.typeMask;key.meta[1]=static_cast<uint32_t>(std::ceil(2*(radius+cellSize)/cellSize))+1;key.meta[2]=trees.seed;key.meta[3]=treeSegmentCapacity;key.patch[1]=std::round(trees.camera.x/32)*32;key.patch[2]=std::round(trees.camera.y/32)*32;key.patch[3]=trees.wholeMap?1.0f:0.0f;key.view[0]=std::round(trees.viewDirection.x*20)/20;key.view[1]=std::round(trees.viewDirection.y*20)/20;key.view[2]=std::round(trees.viewCos*20)/20;key.view[3]=trees.wholeMap&&trees.viewTest?1.0f:0.0f;key.revision=revision;
-    static_assert(sizeof(Key)<=256);
-    if(treeKeyValid&&std::memcmp(lastTreeKey.data(),&key,sizeof(key))==0)return;
-    std::memcpy(lastTreeKey.data(),&key,sizeof(key));treeKeyValid=true;
-    // Clear the draw arguments (vertex counts per kind and LOD, instance counts zero).
-    std::vector<uint32_t> args(treeDrawTypeCount*2*5);for(uint32_t i=0;i<treeDrawTypeCount*2;++i){args[i*4]=treeCount[i];}   /* after the draw arguments: one placement count per segment (first pass) */
-    VkMemoryBarrier before{VK_STRUCTURE_TYPE_MEMORY_BARRIER};before.srcAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT;before.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
-    vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&before,0,nullptr,0,nullptr);
-    vkCmdUpdateBuffer(cmd,treeArgs.handle,0,args.size()*4,args.data());
-    VkMemoryBarrier between{VK_STRUCTURE_TYPE_MEMORY_BARRIER};between.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_SHADER_WRITE_BIT;between.dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT;
-    vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&between,0,nullptr,0,nullptr);
-    VkDescriptorSet sets[3]={fields,hasDetail?treeDetail->fields:fields,hasRing?treeRing->fields:fields};
-    vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,treePlacePipeline);vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,treePlaceLayout,0,3,sets,0,nullptr);
-    struct {glm::vec4 window,base,detail,world;glm::uvec4 meta;glm::vec4 patch,view,ring;} push{{key.window[0],key.window[1],key.window[2],key.window[3]},{key.base[0],key.base[1],key.base[2],key.base[3]},{key.detail[0],key.detail[1],key.detail[2],key.detail[3]},{key.world[0],key.world[1],key.world[2],key.world[3]},{key.meta[0],key.meta[1],key.meta[2],key.meta[3]},{key.patch[0],key.patch[1],key.patch[2],key.patch[3]},{key.view[0],key.view[1],key.view[2],key.view[3]},{key.ring[0],key.ring[1],key.ring[2],key.ring[3]}};
-    static_assert(sizeof(push)==128);
-    // Two passes: count every tree each segment would get, then place them thinned evenly to fit the segment (overflow used to drop whole areas).
-    uint32_t groups=(key.meta[1]+7)/8;push.meta.w=key.meta[3]|0x80000000u;vkCmdPushConstants(cmd,treePlaceLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(push),&push);vkCmdDispatch(cmd,groups,groups,1);
-    VkMemoryBarrier counted{VK_STRUCTURE_TYPE_MEMORY_BARRIER};counted.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT;counted.dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT;vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&counted,0,nullptr,0,nullptr);
-    push.meta.w=key.meta[3];vkCmdPushConstants(cmd,treePlaceLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(push),&push);vkCmdDispatch(cmd,groups,groups,1);
-    VkMemoryBarrier after{VK_STRUCTURE_TYPE_MEMORY_BARRIER};after.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT;after.dstAccessMask=VK_ACCESS_INDIRECT_COMMAND_READ_BIT|VK_ACCESS_SHADER_READ_BIT;
-    vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT|VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,0,1,&after,0,nullptr,0,nullptr);
-}
-void Surface::drawTrees(VkCommandBuffer cmd,const TerrainParams& params,const DrawParams& draw){
-    if(!trees.enabled||!treeDrawPipeline||!treeKeyValid)return;
-    vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,treeDrawPipeline);vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,treeDrawLayout,0,1,&fields,0,nullptr);
-    struct {glm::mat4 vp;glm::vec4 view;glm::uvec4 draw;} push{draw.vp,{params.domain.y,params.domain.z,draw.view.z,treeCullRadius},{0,0,0,0}};
-    for(uint32_t segment=0;segment<treeDrawTypeCount*2;++segment){
-        if(treeCount[segment]==0)continue;push.draw={treeFirst[segment],treeSegmentBase(segment),treeFrustumCull?1u:0u,distanceCull?uint32_t(std::max(1.0f,maxDrawDistance)):0u}; // same culling as the terrain
-        vkCmdPushConstants(cmd,treeDrawLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(push),&push);
-        vkCmdDrawIndirect(cmd,treeArgs.handle,segment*16,1,16);
-    }
 }
 
 void Surface::bindCoarse(Surface& base){
@@ -556,12 +452,6 @@ SurfaceInspection Surface::inspect(glm::vec2 world){
     SurfaceInspection query;auto uv=glm::clamp((world-glm::vec2(lastParams.domain.y,lastParams.domain.z))/lastParams.domain.x+.5f,glm::vec2(0),glm::vec2(1));query.request={uint32_t(std::round(uv.x*(resolution-1))),uint32_t(std::round(uv.y*(resolution-1))),0,0};
     gpu.immediate([&](VkCommandBuffer cmd){vkCmdUpdateBuffer(cmd,inspectionBuffer.handle,0,sizeof(query),&query);VkMemoryBarrier b{VK_STRUCTURE_TYPE_MEMORY_BARRIER};b.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_SHADER_WRITE_BIT;b.dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT;vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&b,0,nullptr,0,nullptr);vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,buildInspection);vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,computeLayout,0,1,&fields,0,nullptr);vkCmdPushConstants(cmd,computeLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(lastParams),&lastParams);vkCmdDispatch(cmd,1,1,1);b.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT;b.dstAccessMask=VK_ACCESS_HOST_READ_BIT;vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,1,&b,0,nullptr,0,nullptr);});
     void* mapped{};vkCheck(vkMapMemory(gpu.device,inspectionBuffer.memory,0,sizeof(query),0,&mapped));std::memcpy(&query,mapped,sizeof(query));vkUnmapMemory(gpu.device,inspectionBuffer.memory);return query;
-}
-
-std::optional<SurfaceInspection> Surface::findBiome(uint32_t biome,glm::vec2 center,float radius){
-    SurfaceInspection query;query.request={biome,0,0xffffffffu,1};query.values={center.x,center.y,radius,0};
-    gpu.immediate([&](VkCommandBuffer cmd){vkCmdUpdateBuffer(cmd,inspectionBuffer.handle,0,sizeof(query),&query);VkMemoryBarrier b{VK_STRUCTURE_TYPE_MEMORY_BARRIER};b.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_SHADER_WRITE_BIT;b.dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT;vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&b,0,nullptr,0,nullptr);vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,buildInspection);vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,computeLayout,0,1,&fields,0,nullptr);vkCmdPushConstants(cmd,computeLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(lastParams),&lastParams);vkCmdDispatch(cmd,(resolution+7)/8,(resolution+7)/8,1);b.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT;b.dstAccessMask=VK_ACCESS_HOST_READ_BIT;vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,1,&b,0,nullptr,0,nullptr);});
-    void* mapped{};vkCheck(vkMapMemory(gpu.device,inspectionBuffer.memory,0,sizeof(query),0,&mapped));std::memcpy(&query,mapped,sizeof(query));vkUnmapMemory(gpu.device,inspectionBuffer.memory);if(query.request.z==0xffffffffu)return std::nullopt;auto index=query.request.z;return inspect((glm::vec2(index%resolution,index/resolution)/float(resolution-1)-.5f)*lastParams.domain.x+glm::vec2(lastParams.domain.y,lastParams.domain.z));
 }
 
 std::vector<uint32_t> Surface::generatedBiomes(){

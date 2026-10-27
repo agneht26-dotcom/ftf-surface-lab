@@ -16,6 +16,7 @@ layout(std430,set=0,binding=3) readonly buffer GraphSeedBuffer {
     vec4 filter4;vec4 filter5;uvec4 filterMeta2;
     uvec4 strataMeta;uint strata[4100];   // FTF StrataRule stacks (world.cpp buildStrata)
     uvec4 surfaceRandom;uvec4 gradientRandoms[2];uint clayBands[48];uint simplexPerms[256];uint improvedNoises[6720];   // world.cpp buildVanillaSurface
+    uvec4 regionSalts;   // FTF region rendezvous salts (world.cpp)
 } graph;
 vec2 terrainBiome=vec2(-1.1);float terrainShapeWeirdness=-.06;
 

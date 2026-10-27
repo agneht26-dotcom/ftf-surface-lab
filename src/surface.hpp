@@ -58,19 +58,21 @@ struct alignas(16) GraphSeeds {
     std::array<uint32_t,48> clayBands{};          // 192 band codes as bytes: terracotta, orange, yellow, brown, red, white, light gray
     std::array<uint32_t,256> simplexPerms{};      // TEMPERATURE_NOISE (1234), FROZEN_TEMPERATURE_NOISE (3456) levels 0, 1, 2: 256 bytes each
     std::array<uint32_t,96*70> improvedNoises{};  // ImprovedNoise: xo, yo, zo doubles then the 256-byte permutation, in generated noise order
+    glm::uvec4 regionSalts{0};   // FTF region rendezvous salts (lo, hi): the weighted region provider seed ^ 0x5D6F7A2C8B9134E1, the replacement layer seed ^ 0x61C8E4A2793DB50F
     GraphSeeds(){familyScales.fill(glm::vec4(0));choices.fill(glm::uvec4(0));mountainScales.fill(glm::vec4(0));}
 };
-static_assert(sizeof(GraphSeeds)==47744);   // stays below vkCmdUpdateBuffer's 65536-byte limit
+static_assert(sizeof(GraphSeeds)==47760);   // stays below vkCmdUpdateBuffer's 65536-byte limit
 static_assert(sizeof(TerrainSample)==32);
 // One Minecraft NormalNoise of an exact mod surface rule (assets/mod-exact-surface-rules.json, normal edition only).
 struct ExactNoiseSpec {std::string name;int firstOctave=0;std::vector<double> amplitudes;};
-constexpr size_t exactNoiseCapacity=32+1024*70;   // words: 8 gradient factories, then up to 1024 ImprovedNoise tables
+constexpr size_t exactNoiseCapacity=32+1024*70;
+constexpr size_t cornerCapacity=1u<<20;   // ints: binding 17, preliminary surface levels per 16-block corner (biomes.comp CORNER_CAPACITY)   // words: 8 gradient factories, then up to 1024 ImprovedNoise tables
 struct alignas(16) SurfaceInspection {glm::uvec4 request{};glm::vec4 values{};glm::uvec4 ids{};glm::vec4 extra{};};
 static_assert(sizeof(SurfaceInspection)==64);
 #include "generation_state.hpp"
 struct alignas(16) GenerationCacheHeader {glm::ivec4 bounds[2]{};glm::uvec4 info{};};
-struct EffectsBlock {glm::vec4 effects,screen,viewport,sun,shadow;glm::uvec4 terrain;glm::vec4 biomeArea,cue,hole,water,fog,cloud,cloud2;}; // ViewEffects SSBO; the first 144 bytes are what terrain/tree shaders read
-static_assert(sizeof(EffectsBlock)==208);
+struct EffectsBlock {glm::vec4 effects,screen,viewport,sun,shadow;glm::uvec4 terrain;glm::vec4 cue,hole,water,fog,cloud,cloud2;}; // ViewEffects SSBO; the first 128 bytes are what terrain shaders read
+static_assert(sizeof(EffectsBlock)==192);
 struct StageTiming { double generate{},filter{},draw{},total{},cache{},world{},ocean{},compose{};bool valid{},generated{}; };
 struct SurfaceFrame {
     Image color,depth,scene; // scene: shaded terrain before the atmosphere sub-pass writes `color`
@@ -99,26 +101,20 @@ public:
     uint32_t mountainCacheSamples{};
     bool useMountainCache{true};
     bool hasRivers{};
-    bool frustumCull=false,distanceCull=false,backfaceCull=false,treeFrustumCull=true;float maxDrawDistance=50000;uint32_t culledPatches=0;
+    bool frustumCull=false,distanceCull=false,backfaceCull=false;float maxDrawDistance=50000;uint32_t culledPatches=0;
     glm::vec4 screenFocus{},viewportSize{},sun{-.47f,.8f,.33f,1},sunShadow{.65f,1500,.35f,0};
     TerrainParams lastParams{};
-    glm::uvec4 terrainMask{};glm::vec4 biomeSearchArea{};
-    // Preview trees (only the whole-world surface owns the resources). The caller sets `trees` every frame; placement reruns when its inputs change.
-    struct TreeSettings {bool enabled=false,wholeMap=true;glm::vec2 center{},camera{},viewDirection{};bool viewTest=false;float viewCos=.55f,maxDistance=0;float radius=600,density=1,lodDistance=140;uint32_t typeMask=0xfff,seed=7;};
-    TreeSettings trees;Surface* treeDetail=nullptr;float treeDetailRadius=0; // the high-detail patch drawn this frame (radius 0 = none)
-    TerrainParams treeDetailParams{};
-    bool treesAvailable()const{return treeInstances.handle!=nullptr;}
+    glm::uvec4 terrainMask{};
     SurfaceInspection inspect(glm::vec2 world);
-    std::optional<SurfaceInspection> findBiome(uint32_t biome,glm::vec2 center,float radius);
     std::vector<uint32_t> generatedBiomes();   // canonical biome ids present anywhere in the last generated grid
-    Surface* treeRing=nullptr;TerrainParams treeRingParams{};Surface* finerBand=nullptr;DrawParams finerBandDraw{};glm::vec4 detailHole{}; // xy absolute centre, z inner hole, w centred coarse field
+    Surface* finerBand=nullptr;DrawParams finerBandDraw{};glm::vec4 detailHole{}; // xy absolute centre, z inner hole, w centred coarse field
     // Render-only atmosphere (second sub-pass): realistic water, height fog, volumetric clouds. All zero = exact copy of the scene.
     struct Atmosphere {glm::vec4 water{},fog{},cloud{},cloud2{};glm::mat4 inverseVP{1};glm::vec4 eye{},domain{},clip{};}; // inverseVP is camera-relative; clip: near, far
     Atmosphere atmosphere;
     glm::vec4 scaleCue{}; // camera x,y,z (absolute world) and strength of the 1-block / 16-block scale grid
     glm::vec4 effects{1,.34f,0,1}; // AO intensity, shadow intensity, elapsed seconds, shadow speed
     bool updateRivers(const std::vector<uint32_t>& data);
-    static VkDeviceSize estimatedFieldBytes(uint32_t n){return static_cast<VkDeviceSize>(n)*n*68;}
+    static VkDeviceSize estimatedFieldBytes(uint32_t n){return static_cast<VkDeviceSize>(n)*n*72;}
     void initialize(Surface* shared=nullptr,std::function<void(uint32_t,uint32_t)> progress={},bool allVariants=false);
     void ensure(uint32_t grid,uint32_t w,uint32_t h);
     StageTiming timing(uint32_t frame);
@@ -151,23 +147,18 @@ private:
     struct AsyncHeights {Buffer staging;uint32_t resolution=0;bool pending=false;TerrainParams params{};uint64_t revision=0;};
     std::vector<AsyncHeights> asyncHeights;
     bool sharedPipelines=false;Surface* pipelineOwner=nullptr;
-    Buffer treeInstances,treeArgs,treeMesh,treeTable;VkPipeline treePlacePipeline{},treeDrawPipeline{};VkPipelineLayout treePlaceLayout{},treeDrawLayout{};
-    std::vector<uint32_t> treeFirst,treeCount;uint32_t treeDrawTypeCount=12;float treeCullRadius=40;std::array<uint8_t,256> lastTreeKey{};bool treeKeyValid=false;
-    void initializeTrees();void buildTreePipelines();
-    void placeTrees(VkCommandBuffer cmd,const TerrainParams& params,uint64_t revision);
-    void drawTrees(VkCommandBuffer cmd,const TerrainParams& params,const DrawParams& draw);
     void buildCompute(VkShaderModule module,VkPipeline& pipeline,int variant,bool filterStage);
     VkPipeline variantPipeline(uint32_t variant);
-    Buffer indices,graphSeeds,mountainCache,cellState,riverNetworks,biomeTable,effectsBuffer,inspectionBuffer,sinTable;
+    Buffer indices,graphSeeds,mountainCache,cellState,regionCells,riverNetworks,biomeTable,effectsBuffer,inspectionBuffer,sinTable;
     std::vector<uint32_t> riverWords;
-    Buffer exactNoise;std::vector<ExactNoiseSpec> exactNoiseSpecs;std::vector<std::string> exactGradients;glm::uvec4 exactNoiseKey{0};bool exactNoiseValid=false;   // binding 16: seeded tables of the exact mod surface rule
+    Buffer exactNoise;std::vector<ExactNoiseSpec> exactNoiseSpecs;std::vector<std::string> exactGradients;glm::uvec4 exactNoiseKey{0};bool exactNoiseValid=false;Buffer cornerLevels;   // binding 17: corner pre-pass output; binding 16: seeded tables of the exact mod surface rule
     Image rawField,field,colors;
     VkDescriptorSet fields{};
     VkDescriptorSetLayout layout{};
     VkPipelineLayout computeLayout{},drawLayout{},atmosphereLayout{};VkPipeline atmospherePipeline{};VkDescriptorSetLayout inputLayout{};
     std::array<VkPipeline,16> generate{};
     std::array<VkPipeline,9> worldFilters{};
-    VkPipeline filter{},drawPipeline{},drawPipelineCulled{},buildMountainCache{},buildMountainSegments{},buildWorldMap{},buildOceanFloor{},buildIslandSurface{},buildClimate{},buildRivers{},buildBiomes{},buildRecolor{},buildInspection{};
+    VkPipeline filter{},drawPipeline{},drawPipelineCulled{},buildMountainCache{},buildMountainSegments{},buildWorldMap{},buildOceanFloor{},buildIslandSurface{},buildClimate{},buildRivers{},buildBiomes{},buildRecolor{},buildInspection{},buildCorners{};
     VkRenderPass renderPass{};
     VkSampler sampler{};
     struct WorkStep {VkPipeline pipeline{};uint32_t x=0,y=0,tile=16,action=0,row=0;}; // row: first workgroup row of a band (biomes.comp reads it from domain.w)

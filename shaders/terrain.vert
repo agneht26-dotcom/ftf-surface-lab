@@ -7,7 +7,7 @@
 layout(rgba32f,set=0,binding=1) uniform readonly image2D surfaceField;
 layout(rgba8,set=0,binding=2) uniform readonly image2D colors;
 layout(rgba32f,set=0,binding=8) uniform readonly image2D coarseField;
-layout(std430,set=0,binding=9) readonly buffer ViewEffects {vec4 effects;vec4 screenFocus;vec4 viewportSize;vec4 sun;vec4 sunShadow;uvec4 terrainMask;vec4 biomeSearchArea;vec4 scaleCue;vec4 detailHole;};
+layout(std430,set=0,binding=9) readonly buffer ViewEffects {vec4 effects;vec4 screenFocus;vec4 viewportSize;vec4 sun;vec4 sunShadow;uvec4 terrainMask;vec4 scaleCue;vec4 detailHole;};
 layout(push_constant) uniform Draw { mat4 vp; vec4 view; uvec4 meta; vec4 focus; vec4 limits; } d;
 layout(location=0) out vec3 color;
 layout(location=1) out vec3 normal;

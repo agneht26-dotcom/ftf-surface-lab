@@ -31,7 +31,7 @@ target_link_libraries(imgui PUBLIC volk glfw)
 find_program(GLSLANG_EXECUTABLE NAMES glslang.exe glslangValidator.exe
     PATHS "${CMAKE_SOURCE_DIR}/.tools/glslang/bin" REQUIRED)
 set(SHADER_OUTPUTS)
-foreach(SHADER terrain.comp terrain.vert terrain.frag filter.comp mountain_cache.comp mountain_segments.comp world_map.comp ocean_floor.comp island_surface.comp climate.comp world_filter.comp rivers.comp biomes.comp tree_place.comp tree.vert tree.frag atmosphere.vert atmosphere.frag)
+foreach(SHADER terrain.comp terrain.vert terrain.frag filter.comp mountain_cache.comp mountain_segments.comp world_map.comp ocean_floor.comp island_surface.comp climate.comp world_filter.comp rivers.comp biomes.comp atmosphere.vert atmosphere.frag)
     set(OUTPUT "${CMAKE_BINARY_DIR}/shaders/${SHADER}.spv")
     add_custom_command(OUTPUT "${OUTPUT}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/shaders"
@@ -42,7 +42,7 @@ foreach(SHADER terrain.comp terrain.vert terrain.frag filter.comp mountain_cache
             "${CMAKE_SOURCE_DIR}/shaders/ftf_mountains.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_sin.glsl"
             "${CMAKE_SOURCE_DIR}/shaders/ftf_land.glsl"
             "${CMAKE_SOURCE_DIR}/shaders/ftf_world.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_water_steps.glsl"
-            "${CMAKE_SOURCE_DIR}/shaders/ftf_islands.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_climate.glsl" "${CMAKE_SOURCE_DIR}/shaders/cell_state.glsl" "${CMAKE_SOURCE_DIR}/shaders/materials.glsl" "${CMAKE_SOURCE_DIR}/shaders/material_rules_generated.glsl" "${CMAKE_SOURCE_DIR}/shaders/mod_material_rules_generated.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_filters.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_rivers.glsl"
+            "${CMAKE_SOURCE_DIR}/shaders/ftf_islands.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_climate.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_region_cells.glsl" "${CMAKE_SOURCE_DIR}/shaders/cell_state.glsl" "${CMAKE_SOURCE_DIR}/shaders/materials.glsl" "${CMAKE_SOURCE_DIR}/shaders/material_rules_generated.glsl" "${CMAKE_SOURCE_DIR}/shaders/mod_material_rules_generated.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_filters.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_rivers.glsl"
         VERBATIM)
     list(APPEND SHADER_OUTPUTS "${OUTPUT}")
 endforeach()

@@ -11,12 +11,13 @@
 layout(local_size_x=8,local_size_y=8) in;
 layout(rgba32f,set=0,binding=0) uniform image2D rawField;
 layout(rgba8,set=0,binding=2) uniform image2D colors;
+layout(std430,set=0,binding=18) writeonly buffer RegionCells {uint regionCells[];};   // biome-region cell per sample (regionCellPack)
 layout(push_constant) uniform Params {uvec4 meta;vec4 domain;vec4 land;vec4 detail;vec4 climate;uvec4 seeds0;uvec4 seeds1;vec4 ftfScales;} p;
 void main(){
     uvec2 q=gl_GlobalInvocationID.xy;uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;
     precise vec2 fraction=vec2(dvec2(q)/double(n-1)),world=(fraction-.5)*p.domain.x+p.domain.yz;
-    vec4 field=imageLoad(rawField,ivec2(q)),encoded=imageLoad(colors,ivec2(q));float assignment=round(encoded.a*255.0);vec2 region;
-    vec2 climate=ftfClimate(world,worldDiv(field.x,graph.worldLevels.w),q.y*n+q.x,region);field.zw=climate;
+    vec4 field=imageLoad(rawField,ivec2(q)),encoded=imageLoad(colors,ivec2(q));float assignment=round(encoded.a*255.0);vec2 region;ivec2 regionCell;
+    vec2 climate=ftfClimate(world,worldDiv(field.x,graph.worldLevels.w),q.y*n+q.x,region,regionCell);field.zw=climate;regionCells[q.y*n+q.x]=regionCellPack(regionCell,p.domain.yz);
     // Basic climate-zone palette. FTF climate values, not Minecraft registry biome IDs.
     float temperature=climate.x,moisture=climate.y;vec3 color=vec3(.29,.48,.22);
     if(moisture>.58)color=vec3(.10,.31,.17);

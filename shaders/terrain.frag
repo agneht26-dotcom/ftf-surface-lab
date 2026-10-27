@@ -11,7 +11,7 @@ layout(location=0) out vec4 outColor;
 layout(rgba8,set=0,binding=2) uniform readonly image2D terrainColors;
 layout(rgba32f,set=0,binding=1) uniform readonly image2D surfaceField;
 layout(rgba32f,set=0,binding=8) uniform readonly image2D coarseField;
-layout(std430,set=0,binding=9) readonly buffer ViewEffects {vec4 effects;vec4 screenFocus;vec4 viewportSize;vec4 sun;vec4 sunShadow;uvec4 terrainMask;vec4 biomeSearchArea;vec4 scaleCue;vec4 detailHole;};
+layout(std430,set=0,binding=9) readonly buffer ViewEffects {vec4 effects;vec4 screenFocus;vec4 viewportSize;vec4 sun;vec4 sunShadow;uvec4 terrainMask;vec4 scaleCue;vec4 detailHole;};
 layout(push_constant) uniform Draw { mat4 vp; vec4 view; uvec4 meta; vec4 focus; vec4 limits; } d;
 layout(std430,set=0,binding=7) readonly buffer BiomeLookup {uint words[];} biomeLookup;
 uint canonicalBiome(uint biome){if(biome>=biomeLookup.words[1])return 0xffffffffu;uint footer=uint(biomeLookup.words.length())-8u;if(biomeLookup.words[footer]!=0x4654464du)return biome;uint alias=biomeLookup.words[biomeLookup.words[footer+6u]+biome];return (alias&131072u)!=0u?alias&65535u:biome;}
@@ -90,7 +90,7 @@ void main(){
     if(terrainMask.z!=0u&&(d.meta.z==4u||d.meta.z==5u)){
         ivec2 q=ivec2(clamp((worldXZ-d.limits.zw)/d.view.x+.5,vec2(0),vec2(1))*float(d.meta.x-1u));
         uint assignment=uint(round(imageLoad(terrainColors,q).a*255.0));uint full=d.meta.z==5u?cells[uint(q.y)*d.meta.x+uint(q.x)].terrain:0u,role=full&255u;
-        terrainMatch=terrainMask.w>=200u?(canonicalBiome(cells[uint(q.y)*d.meta.x+uint(q.x)].biome)==canonicalBiome(terrainMask.w-200u)&&distance(worldXZ,biomeSearchArea.xy)<=biomeSearchArea.z):terrainMask.w>=100u?role==terrainMask.w-100u:assignment<32u?(terrainMask.x&(1u<<assignment))!=0u:assignment<64u?(terrainMask.y&(1u<<(assignment-32u)))!=0u:false;
+        terrainMatch=terrainMask.w>=100u?role==terrainMask.w-100u:assignment<32u?(terrainMask.x&(1u<<assignment))!=0u:assignment<64u?(terrainMask.y&(1u<<(assignment-32u)))!=0u:false;
         if(terrainMask.w==112u)terrainMatch=role==12u||(role==10u&&(full&512u)!=0u)||(role!=4u&&role!=5u&&role!=6u&&role!=8u&&role!=10u&&role!=11u&&imageLoad(surfaceField,q).x<d.view.y);   /* lakes: widened river stretches, and inland ground below sea level (Minecraft fills it with water) */
         if(terrainMask.w==110u)terrainMatch=role==10u&&(full&512u)==0u;
         if(terrainMask.w==9u&&role==2u)terrainMatch=true;if(terrainMask.w==12u&&role==3u)terrainMatch=true;

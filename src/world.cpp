@@ -184,4 +184,6 @@ void buildSurfaceInputs(const nlohmann::ordered_json& preset,int64_t seed,GraphS
     if((flags&2u)&&(output.surfaceOptions.x<4||output.surfaceOptions.x>2147483520.0f))throw std::runtime_error("Strata region size must be at least 4 (FTF warps at size/4)");
     if(flags&2u)buildStrata(seed,int(output.surfaceOptions.x),output);
     buildVanillaSurface(seed,output);
+    const uint64_t tb=static_cast<uint64_t>(seed)^0x5D6F7A2C8B9134E1ull,litho=static_cast<uint64_t>(seed)^0x61C8E4A2793DB50Full;
+    output.regionSalts={uint32_t(tb),uint32_t(tb>>32),uint32_t(litho),uint32_t(litho>>32)};
 }

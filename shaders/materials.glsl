@@ -167,6 +167,19 @@ int materialPreliminary(ivec2 b){
     }
     return 2147483647;
 }
+#ifdef MATERIAL_CORNERS
+// Corner pre-pass (biomes.comp CORNERS, src/surface_generation.cpp dispatches it under the same condition): in the block view
+// at sample spacing <= 4 blocks, materialPreliminary runs once per 16-block corner instead of 4 times per column. Inspection
+// computes directly.
+int cornerBound(){return int(p.domain.x/16.0)+5;}
+bool cornerUse(){return graph.biomeSeeds2.w==3u&&p.domain.x<=4.0*float(p.meta.x-1u)&&(cornerBound()+7)/8*8<=1024;}
+ivec2 cornerOrigin(){return (ivec2(floor(p.domain.yz-p.domain.x*.5))>>4)-1;}
+int cornerLevel(ivec2 corner){
+    if(!INSPECTION&&cornerUse()){ivec2 k=(corner>>4)-cornerOrigin();int b=cornerBound();if(all(greaterThanEqual(k,ivec2(0)))&&all(lessThan(k,ivec2(b))))return corners.levels[k.y*b+k.x];}
+    return materialPreliminary(corner);}
+#else
+int cornerLevel(ivec2 corner){return materialPreliminary(corner);}
+#endif
 // Biome features of the exact mod set that rewrite the top block, applied after scree (prepare_exact_mod_rules.py
 // decorations): recolour (replace_blobs) and scatter (simple_block over environment_scan: the top is a target and the blocks
 // two above it at +x and +-z are air, i.e. those columns are at most one block higher).
@@ -181,7 +194,7 @@ uint exactDecorate(uint top){
 }
 // SurfaceRules.Context.getMinSurfaceLevel: floor(lerp2 of the four corner levels) + surfaceDepth - 8.
 int materialMinSurface(){
-    ivec2 cell=matBlock>>4,corner=cell<<4;double c0=double(materialPreliminary(corner)),c1=double(materialPreliminary(corner+ivec2(16,0))),c2=double(materialPreliminary(corner+ivec2(0,16))),c3=double(materialPreliminary(corner+ivec2(16,16)));
+    ivec2 cell=matBlock>>4,corner=cell<<4;double c0=double(cornerLevel(corner)),c1=double(cornerLevel(corner+ivec2(16,0))),c2=double(cornerLevel(corner+ivec2(0,16))),c3=double(cornerLevel(corner+ivec2(16,16)));
     double fx=double(float(matBlock.x&15)/16.0),fz=double(float(matBlock.y&15)/16.0);precise double a=c0+fx*(c1-c0),b=c2+fx*(c3-c2);precise double v=a+fz*(b-a);
     return int(min(floor(v),2147483647.0LF))+matSurfaceDepth-8;
 }

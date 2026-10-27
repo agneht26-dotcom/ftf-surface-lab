@@ -6,7 +6,7 @@
 
 A realtime terrain-surface editor for [FreeTerraForged](https://www.curseforge.com/minecraft/mc-mods/freeterraforged) (FTF) presets for Minecraft 1.21.1. Move a slider and the terrain, biomes and surface blocks of the whole world update live, with no need to create a world in the game.
 
-This edition covers FTF with **vanilla Minecraft 1.21.1** biomes, blocks and trees. Terrain generation follows FreeTerraForged, used with its developer's permission.
+This edition covers FTF with **vanilla Minecraft 1.21.1** biomes and blocks. Terrain generation follows FreeTerraForged, used with its developer's permission.
 
 ## Download and run
 
@@ -21,8 +21,8 @@ Requirements: Windows 10 or 11 (64-bit) and a GPU with Vulkan 1.1 or newer. It w
 
 - Open an FTF preset (or start from FTF's built-in presets) and edit every setting: continents, terrain, mountains, rivers, lakes, climate and filters.
 - See the result in 3D straight away: orbit, fly (`F`) or walk on the surface Minecraft-style (`G`).
-- Biome colours, block colours or grass and foliage tints, a biome finder (`N`), and a **Biomes generated** count that shows which biomes appear within the preview world size.
-- Measuring (`M`), points (`B`), recentre (`C`), spawn (`P`), trees (`T`), undo/redo, projects and autosave.
+- Biome colours, block colours or grass and foliage tints, and a **Biomes generated** count that shows which biomes appear within the preview world size.
+- Measuring (`M`), points (`B`), recentre (`C`), spawn (`P`), undo/redo, projects and autosave.
 - Export the edited preset, or a datapack, for use in the game.
 
 ## How it works
@@ -32,7 +32,7 @@ The whole pipeline runs on the GPU as Vulkan compute shaders, one terrain sample
 1. **Terrain:** FTF's terrain graphs (continents, mountains, volcanoes, rivers, lakes, wetlands, climate and world filters such as erosion), ported from FTF's code with the same seeds, noise and order of operations.
 2. **Biomes:** Minecraft 1.21.1's own biome table and climate lookup, run on FTF's climate values.
 3. **Surface blocks:** Minecraft's surface rules with its seeded noises, surface depth, temperature and preliminary surface, plus FTF's strata, scree, snow and river water.
-4. **Display:** a level-of-detail mesh (finer near the camera), block or biome colours, trees, water, fog and clouds.
+4. **Display:** a level-of-detail mesh (finer near the camera), block or biome colours, water, fog and clouds.
 
 The ported parts were checked against the real FTF and Minecraft classes, value for value.
 
@@ -42,8 +42,8 @@ The ported parts were checked against the real FTF and Minecraft classes, value 
 |---|---|
 | **Exact** | Terrain height with FTF 1.0.0010: compared with a real world from the same seed and preset, 94-99% of columns have the exact height in the test areas. Biome selection (Minecraft's table on FTF's climate, without the game's 4-block biome blending). Vanilla surface blocks, checked bit for bit against the game's classes. |
 | **Exact port, not yet compared with a world** | Terrain height with FTF 1.0.0013 and 1.0.0014 (their filter settings). |
-| **Approximate** | Tree positions and shapes (kinds follow each biome). One colour per block, with biome tints. Between samples the mesh is interpolated: a coarser grid shows the same terrain at lower resolution. |
-| **Not shown** | Caves, underground ores, the Nether and the End. Structures, flowers, grass and other small decorations. |
+| **Approximate** | One colour per block, with biome tints. Between samples the mesh is interpolated: a coarser grid shows the same terrain at lower resolution. |
+| **Not shown** | Caves, underground ores, the Nether and the End. Trees, structures, flowers, grass and other small decorations. |
 
 ## Limitations
 

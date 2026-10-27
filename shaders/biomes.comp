@@ -13,10 +13,15 @@
 layout(local_size_x=8,local_size_y=8) in;
 layout(constant_id=3) const bool INSPECTION=false;
 layout(constant_id=4) const bool RECOLOR_ONLY=false;
+layout(constant_id=5) const bool CORNERS=false;   // corner pre-pass (materials.glsl cornerLevel)
+layout(std430,set=0,binding=17) buffer CornerLevels {int levels[];} corners;
+#define MATERIAL_CORNERS
 layout(std430,set=0,binding=10) buffer Inspection {uvec4 request;vec4 values;uvec4 ids;vec4 extra;uint seen[32];} inspection;   // seen: biome-count bitset (request.w 2)
 layout(rgba32f,set=0,binding=0) uniform readonly image2D rawField;
 layout(rgba8,set=0,binding=2) uniform image2D colors;
 layout(std430,set=0,binding=7) readonly buffer BiomeTable {uint words[];} table;
+layout(std430,set=0,binding=18) readonly buffer RegionCells {uint regionCells[];};   // climate.comp: FTF biome-region cell per sample
+#include "ftf_region_cells.glsl"
 layout(push_constant) uniform Params {uvec4 meta;vec4 domain;vec4 land;vec4 detail;vec4 climate;uvec4 seeds0;uvec4 seeds1;vec4 ftfScales;} p;
 float biomeContinentalness(vec2 world,vec4 field,uint index){
     uint type=cells[index].terrain&255u;float edge=field.y,deep=graph.controlPoints.x,shallow=graph.controlPoints.y,beach=graph.biomeOptions.x,inland=graph.controlPoints.w;
@@ -50,15 +55,75 @@ uint riverRoot(uint provider){
  if(provider==0u)return table.words[3];
  uint footer=uint(table.words.length())-8u;return table.words[footer]==0x4654464du&&table.words[footer-6u]==0x52495652u?table.words[footer-5u+provider]:0xffffffffu;
 }
-// FTF order: the provider's list picks the base biome, mod replacements decorate it, then TerrainBiomeRoleSelection: in a river
-// cell whose biome no replacement changed, the biome is picked again from that provider's #minecraft:is_river surface entries.
-uint modBiome(uint biome,int query[7],vec2 world,bool river){
- uint mask=graph.surfaceMeta.w>>1u,footer=uint(table.words.length())-8u,provider=0u;bool mods=mask!=0u&&table.words[footer]==0x4654464du;uint original=biome;
+// FTF's region selection (tools/region_selection.py block 'RGNS', footer word 5). WeightedRendezvous / CellRendezvous:
+// SplitMix64 finaliser over the FTF biome-region cell, then per candidate over its id's UTF-8 bytes; score -log(u)/weight,
+// lowest wins, ties to the smaller id. Math.log is fdlibm's __ieee754_log (ported below, no fused multiply-adds).
+uint64_t regionMix(uint64_t v){v=(v^(v>>30))*0xBF58476D1CE4E5B9UL;v=(v^(v>>27))*0x94D049BB133111EBUL;return v^(v>>31);}
+double fdlibmLog(double x){   // x in (0, 1]: positive, normal
+    const double ln2Hi=6.93147180369123816490e-01LF,ln2Lo=1.90821492927058770002e-10LF;
+    uvec2 w=unpackDouble2x32(x);int hx=int(w.y);int k=(hx>>20)-1023;hx&=0x000fffff;int i=(hx+0x95f64)&0x100000;
+    precise double xn=packDouble2x32(uvec2(w.x,uint(hx|(i^0x3ff00000))));k+=i>>20;precise double f=xn-1.0LF,dk=double(k);
+    if((0x000fffff&(2+hx))<3){
+        if(f==0.0LF)return k==0?0.0LF:dk*ln2Hi+dk*ln2Lo;
+        precise double r=f*f*(.5LF-.33333333333333333LF*f);return k==0?f-r:dk*ln2Hi-((r-dk*ln2Lo)-f);
+    }
+    precise double s=f/(2.0LF+f),z=s*s,ww=z*z;int a=hx-0x6147a,b=0x6b851-hx;
+    precise double t1=ww*(3.999999999940941908e-01LF+ww*(2.222219843214978396e-01LF+ww*1.531383769920937332e-01LF));
+    precise double t2=z*(6.666666666666735130e-01LF+ww*(2.857142874366239149e-01LF+ww*(1.818357216161805012e-01LF+ww*1.479819860511658591e-01LF)));
+    precise double r=t2+t1;
+    if((a|b)>0){precise double hfsq=.5LF*f*f;return k==0?f-(hfsq-s*(hfsq+r)):dk*ln2Hi-((hfsq-(s*(hfsq+r)+dk*ln2Lo))-f);}
+    return k==0?f-s*(f-r):dk*ln2Hi-((s*(f-r)-dk*ln2Lo)-f);
+}
+// Entry: weight double (lo, hi), id byte length, id word offset (4 bytes per word, little endian).
+uint regionIdByte(uint entry,uint i){return (table.words[table.words[entry+3u]+(i>>2u)]>>((i&3u)*8u))&255u;}
+bool regionIdLess(uint a,uint b){uint la=table.words[a+2u],lb=table.words[b+2u];for(uint i=0u;i<min(la,lb);++i){uint x=regionIdByte(a,i),y=regionIdByte(b,i);if(x!=y)return x<y;}return la<lb;}
+// Candidates: count entries at list (4 words each); with members!=0xffffffff, candidate k is entry table.words[members+k].
+uint regionRendezvous(uint64_t salt,ivec2 cell,uint list,uint count,uint members){
+    if(count==1u)return members==0xffffffffu?0u:table.words[members];
+    uint64_t mz=regionMix(uint64_t(int64_t(cell.y))),hash=regionMix(salt^regionMix(uint64_t(int64_t(cell.x)))^((mz<<29)|(mz>>35)));   // coordinateHash
+    double unit=packDouble2x32(uvec2(0x00000000u,0x3ca00000u));   // (double)1.110223E-16f, which is 2^-53
+    uint best=0xffffffffu;double bestScore=0.0LF;
+    for(uint k=0u;k<count;++k){
+        uint index=members==0xffffffffu?k:table.words[members+k],entry=list+index*4u;uint64_t h=hash;
+        for(uint i=0u;i<table.words[entry+2u];++i)h=regionMix(h^uint64_t(regionIdByte(entry,i)));
+        precise double u=(double(h>>11)+1.0LF)*unit,score=-fdlibmLog(u)/packDouble2x32(uvec2(table.words[entry],table.words[entry+1u]));
+        if(best==0xffffffffu||score<bestScore||(score==bestScore&&regionIdLess(entry,list+best*4u))){best=index;bestScore=score;}
+    }
+    return best;
+}
+bool regionCriteria(uint at,int query[7],uint region){   // the replacement layer ParameterCriteria: region (0xffffffff: any) + inclusive quantized ranges
+    if(table.words[at+1u]!=0xffffffffu&&table.words[at+1u]!=region)return false;
+    for(uint a=0u;a<6u;++a)if(query[a]<int(table.words[at+2u+a*2u])||query[a]>int(table.words[at+3u+a*2u]))return false;
+    return true;
+}
+uint regionDebug[10];   // material debug 92-101: provider, the replacement layer region, biome after the river role, final biome, target 0-5
+// FTF order (WorldgenBiomeSelection + SelectionDecoration stages sorted by order): the the weighted region provider provider of the cell's
+// region (WeightedRendezvous) picks from its list; stage 0, FTF's policy (TerrainBiomeRoleSelection): a river cell picks again
+// from that provider's #minecraft:is_river surface entries; stage 200, the replacement layer: a region per (biome, cell)
+// (CellRendezvous), then force placements, then the first partial replacement (priority, then id) whose targets hold the biome.
+uint modBiome(uint biome,int query[7],bool river,ivec2 cell){
+ uint mask=graph.surfaceMeta.w>>1u,footer=uint(table.words.length())-8u,provider=0u;bool mods=mask!=0u&&table.words[footer]==0x4654464du;
+ uint rg=mods?table.words[footer+5u]:0u;if(rg==0u||rg+11u>footer||table.words[rg]!=0x52474E53u)rg=0xffffffffu;
+ regionDebug=uint[10](0xffffffu,0xffffffu,0u,0u,uint(query[0]),uint(query[1]),uint(query[2]),uint(query[3]),uint(query[4]),uint(query[5]));
  if(mods&&(mask&1u)!=0u){biome=biomeSearch(table.words[footer+1u],query);provider=1u;}
- if(mods&&(mask&2u)!=0u){float region=ftfPerlinNode(world,graph.regionSeeds.x+17311u,1800,2,2.0);if(region>((mask&1u)!=0u?.57:.35)){float r=ftfPerlinNode(world,graph.regionSeeds.x+17312u,2500,1,2.0);uint variant=r>.80?3u:r>.55?2u:1u;biome=biomeSearch(table.words[footer+1u+variant],query);provider=1u+variant;}}
- uint base=biome;
- if(mods&&(mask&4u)!=0u){uint data=table.words[footer+5u],count=table.words[data],total=100u;for(uint i=0u;i<count;++i){uint at=data+1u+i*20u;if(modRuleMatches(at,query,original))total+=table.words[at+3u];}float region=ftfPerlinNode(world,graph.regionSeeds.x+51393u,900,2,2.0);uint choice=uint(clamp(region,0.0,.99999)*float(total));if(choice>=100u){choice-=100u;for(uint i=0u;i<count;++i){uint at=data+1u+i*20u;if(modRuleMatches(at,query,original)){uint weight=table.words[at+3u];if(choice<weight){biome=table.words[at];break;}choice-=weight;}}}}
- if(river&&biome==base){uint root=riverRoot(provider);if(root!=0xffffffffu)biome=biomeSearch(root,query);}
+ if(mods&&(mask&2u)!=0u&&rg!=0xffffffffu){   // minecraft:overworld (vanilla, or the the first biome pack list when the first biome pack is on: unverified) or a BOP region
+  uint k=regionRendezvous(uint64_t(graph.regionSalts.x)|(uint64_t(graph.regionSalts.y)<<32),cell,table.words[rg+3u],table.words[rg+2u],0xffffffffu);
+  regionDebug[0]=k;if(k>0u){biome=biomeSearch(table.words[footer+1u+k],query);provider=1u+k;}
+ }
+ if(river){uint root=riverRoot(provider);if(root!=0xffffffffu)biome=biomeSearch(root,query);}
+ regionDebug[2]=biome;
+ if(mods&&(mask&4u)!=0u&&rg!=0xffffffffu){
+  uint key=canonicalBiome(biome),region=0xfffffffeu;   // noRegion: matches only criteria without a region
+  if(key<table.words[1]){uint members=table.words[table.words[rg+6u]+key];
+   if(members!=0u)region=regionRendezvous(uint64_t(graph.regionSalts.z)|(uint64_t(graph.regionSalts.w)<<32),cell,table.words[rg+5u],table.words[members],members+1u);}
+  regionDebug[1]=region&0xffffffu;
+  bool forced=false;
+  for(uint i=0u;i<table.words[rg+7u];++i){uint at=table.words[rg+8u]+i*14u;if(regionCriteria(at,query,region)){biome=table.words[at];forced=true;break;}}
+  if(!forced)for(uint i=0u;i<table.words[rg+9u];++i){uint at=table.words[rg+10u]+i*16u;bool target=false;
+   for(uint t=0u;t<table.words[at+14u];++t)if(table.words[table.words[at+15u]+t]==key){target=true;break;}
+   if(target&&regionCriteria(at,query,region)){biome=table.words[at];break;}}
+ }
+ regionDebug[3]=biome;
  return biome;
 }
 vec3 unpackRgb(uint rgb){return vec3((rgb>>16u)&255u,(rgb>>8u)&255u,rgb&255u)/255.0;}
@@ -72,29 +137,32 @@ double biomeInfoNoise(dvec2 p){
     return 70.0LF*(biomeCorner(ga,a)+biomeCorner(gb,b)+biomeCorner(gc,c));
 }
 #include "materials.glsl"
+uint regionDebugValue(int k,uint index){ivec2 c=regionCellUnpack(regionCells[index],p.domain.yz);return (k==-2?uint(c.x):k==-1?uint(c.y):regionDebug[k])&0xffffffu;}   // 90/91 cell x/z, 92-101 regionDebug
 void main(){
     if(INSPECTION&&inspection.request.w==2u){   // biome count: mark every canonical biome present in the grid
         uvec2 q=gl_GlobalInvocationID.xy;uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;
         uint b=canonicalBiome(cells[q.y*n+q.x].biome);if(b<1024u)atomicOr(inspection.seen[b>>5u],1u<<(b&31u));
         return;
     }
-    if(INSPECTION&&inspection.request.w!=0u){
-        uvec2 q=gl_GlobalInvocationID.xy;uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;
-        uint index=q.y*n+q.x;vec2 world=(vec2(q)/float(n-1)-.5)*p.domain.x+p.domain.yz;
-        if(distance(world,inspection.values.xy)<=inspection.values.z&&canonicalBiome(cells[index].biome)==canonicalBiome(inspection.request.x))atomicMin(inspection.request.z,index);
-        return;
+    if(CORNERS){   // one invocation per 16-block corner: the preliminary level from the sample nearest to it, as the block pass would
+        if(!cornerUse())return;ivec2 k=ivec2(gl_GlobalInvocationID.xy);int b=cornerBound();if(any(greaterThanEqual(k,ivec2(b))))return;
+        ivec2 corner=(cornerOrigin()+k)<<4;uint n=p.meta.x;matStep=float(n-1u)/p.domain.x;
+        ivec2 s=clamp(ivec2(round((vec2(corner)-(p.domain.yz-p.domain.x*.5))*matStep)),ivec2(0),ivec2(int(n)-1));
+        precise vec2 fraction=vec2(dvec2(s)/double(n-1)),world=(fraction-.5)*p.domain.x+p.domain.yz;matPoint=vec2(s);matSample=world;
+        corners.levels[k.y*b+k.x]=materialPreliminary(corner);return;
     }
     if(INSPECTION&&any(notEqual(gl_GlobalInvocationID,uvec3(0))))return;
     // domain.w: the first row of a progressive build's band (0 otherwise).
     uvec2 q=INSPECTION?inspection.request.xy:gl_GlobalInvocationID.xy+uvec2(0u,uint(p.domain.w));uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;uint index=q.y*n+q.x;
     precise vec2 fraction=vec2(dvec2(q)/double(n-1)),world=(fraction-.5)*p.domain.x+p.domain.yz;vec4 field=imageLoad(rawField,ivec2(q));
     float continentalness=biomeContinentalness(world,field,index);int target[7];target[0]=int((field.z*2.0-1.0)*10000.0);target[1]=int((field.w*2.0-1.0)*10000.0);target[2]=int(continentalness*10000.0);target[3]=int(cells[index].erosion*10000.0);target[4]=0;target[5]=int(cells[index].weirdness*10000.0);target[6]=0;
-    uint biome=RECOLOR_ONLY?cells[index].biome:modBiome(biomeSearch(table.words[2],target),target,world,(cells[index].terrain&255u)==10u);if(graph.biomeOptions.z>0.0)biome=uint(graph.biomeOptions.z)-1u;if(!INSPECTION)cells[index].biome=biome;
+    bool regionKey=graph.surfaceOptions.w>=92.0&&graph.surfaceOptions.w<=103.0;   // material debug 90-101 needs modBiome's values in a recolour pass too
+    uint biome=RECOLOR_ONLY&&!regionKey?cells[index].biome:modBiome(biomeSearch(table.words[2],target),target,(cells[index].terrain&255u)==10u,regionCellUnpack(regionCells[index],p.domain.yz));if(graph.biomeOptions.z>0.0)biome=uint(graph.biomeOptions.z)-1u;if(!INSPECTION)cells[index].biome=biome;
     uint offset=table.words[4]+biome*4u,mode=graph.biomeSeeds2.w;vec3 color=unpackRgb(table.words[offset+min(mode,2u)]);
     if(mode==1u&&swampBiome(biome))color=unpackRgb(biomeInfoNoise(dvec2(world)*.0225LF)<-.1LF?5011004u:6975545u);
     float localWater=graph.worldLevels.z;if(cells[index].waterHeight>0.0)localWater=max(localWater,cells[index].waterHeight*graph.worldLevels.w+1.0);
     if(INSPECTION){uint block=materialAt(world,field,index,biome,localWater);inspection.values=vec4(field.x,field.z,field.w,localWater);inspection.ids=uvec4(biome,cells[index].terrain&255u,block,uint(round(imageLoad(colors,ivec2(q)).a*255.0)));inspection.extra=vec4(world,cells[index].erosion,cells[index].weirdness);return;}
     if(mode>0u&&mode<3u&&field.x<localWater)color=unpackRgb(table.words[offset+3u]);
-    if(mode==3u){uint block=materialAt(world,field,index,biome,localWater);color=graph.surfaceOptions.w>1.5?unpackRgb(materialDebug(int(graph.surfaceOptions.w)-2)):graph.surfaceOptions.w>0.0?unpackRgb(block):materialColor(block,biome,world);}
+    if(mode==3u){uint block=materialAt(world,field,index,biome,localWater);color=graph.surfaceOptions.w>1.5?unpackRgb(int(graph.surfaceOptions.w)-2>=90&&int(graph.surfaceOptions.w)-2<=101?regionDebugValue(int(graph.surfaceOptions.w)-94,index):materialDebug(int(graph.surfaceOptions.w)-2)):graph.surfaceOptions.w>0.0?unpackRgb(block):materialColor(block,biome,world);}
     imageStore(colors,ivec2(q),vec4(color,imageLoad(colors,ivec2(q)).a));
 }

@@ -5,7 +5,7 @@ layout(input_attachment_index=0,set=1,binding=0) uniform subpassInput sceneColor
 layout(input_attachment_index=1,set=1,binding=1) uniform subpassInput sceneDepth;
 layout(rgba32f,set=0,binding=1) uniform readonly image2D surfaceField;
 layout(std430,set=0,binding=9) readonly buffer ViewEffects {
-    vec4 effects;vec4 screenFocus;vec4 viewportSize;vec4 sun;vec4 sunShadow;uvec4 terrainMask;vec4 biomeSearchArea;vec4 scaleCue;vec4 detailHole;
+    vec4 effects;vec4 screenFocus;vec4 viewportSize;vec4 sun;vec4 sunShadow;uvec4 terrainMask;vec4 scaleCue;vec4 detailHole;
     vec4 atmoWater;   // enabled, ripple strength, reflection strength, sea level (scene units)
     vec4 atmoFog;     // enabled, density per 1000 blocks, height falloff per 1000 blocks, fog base height
     vec4 atmoCloud;   // enabled, coverage, density, base height
@@ -45,9 +45,7 @@ vec3 shadeWater(vec3 scene,vec3 position,vec3 view,vec3 sunDir,float depth){
     float glint=pow(max(dot(reflected,sunDir),0.0),220.0)*sun.w*2.2*mix(.15,1.0,distanceFade);
     vec3 refracted=scene*mix(vec3(.55,.80,.92),vec3(1.0),exp(-depth*.03));            // absorption: deeper water loses red first
     refracted=mix(vec3(.02,.09,.16)*scene+vec3(.01,.04,.07),refracted,exp(-depth*.012));
-    vec3 color=mix(refracted,sky,clamp(fresnel*atmoWater.z,0.0,1.0))+vec3(glint)*atmoWater.z;
-    float foam=smoothstep(3.5,.2,depth)*mix(.35,smoothstep(.45,.75,fbm(p*.35+pc.eye.w*.15)),smoothstep(6.0,1.0,footprint));
-    return mix(color,vec3(.93,.97,1.0),foam*.55);
+    return mix(refracted,sky,clamp(fresnel*atmoWater.z,0.0,1.0))+vec3(glint)*atmoWater.z;   // shore foam removed in 1.10 (user: buggy)
 }
 void main(){
     vec3 scene=subpassLoad(sceneColor).rgb;float depth=subpassLoad(sceneDepth).r;
