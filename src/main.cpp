@@ -365,6 +365,13 @@ int main(int argc,char** argv){
                             blend=std::max(glm::smoothstep(detailScreen.z*.70f,detailScreen.z*.94f,glm::length(pixel-glm::vec2(detailScreen))),glm::smoothstep(.88f,.96f,edge));}}
                     h=std::lerp(*f,*h,blend);}}
             return h;};
+        // Highest sample of the preview field, read in bands of about 32 MB (a single copy of an 8192 field is ~1 GB).
+        auto findHighest=[&]()->std::optional<std::pair<size_t,float>>{
+            const uint32_t G=surface.resolution;if(!surface.fieldRevision||G<2)return std::nullopt;const uint32_t rows=std::clamp((32u<<20)/(G*16u),1u,G);
+            float best=-1e30f;size_t index=0;bool any=false;
+            for(uint32_t y=0;y<G;y+=rows){uint32_t n=std::min(rows,G-y);auto band=surface.heightWindows({glm::ivec4(0,int(y),int(G),int(n))});
+                for(size_t i=0;i<band[0].size();++i)if(band[0][i]>best){best=band[0][i];index=size_t(y)*G+i;any=true;}}
+            if(!any)return std::nullopt;return std::make_pair(index,best);};
         auto sampleGround=[&](glm::vec2 world,float& out){
             if(surface.fieldRevision&&(baseHeightCache.empty()||(baseHeightRevision!=surface.fieldRevision&&elapsed-lastHeightRefresh>.4))){stallScope("pick heights (sync readback)",[&]{baseHeightCache=surface.pickHeights();});baseHeightRevision=surface.fieldRevision;lastHeightRefresh=elapsed;}
             auto h=meshHeight(world,false);if(!h)return false;out=*h;return true;};
@@ -788,8 +795,8 @@ int main(int argc,char** argv){
             if((params.meta.z==2||params.meta.z==4||params.meta.z==5)&&sectionIconHeader("Heights")){
                 ImGui::Checkbox("Highlight terrain above Y",&showAboveHeight);valueSlider("##aboveHeight",aboveHeight,-64,4096,"%.0f");
                 if(showAboveHeight)ImGui::TextColored({1,.8f,.25f,1},"Amber hatching: terrain above Y %.0f",aboveHeight);
-                if(ImGui::Button("Find highest point")){auto t0=std::chrono::steady_clock::now();auto field=surface.heightField();uint32_t G=surface.resolution;
-                    if(!field.empty()){size_t best=size_t(std::max_element(field.begin(),field.end())-field.begin());float hx=(float(best%G)/float(G-1)-.5f)*params.domain.x+params.domain.y,hz=(float(best/G)/float(G-1)-.5f)*params.domain.x+params.domain.z,hy=field[best];
+                if(ImGui::Button("Find highest point")){auto t0=std::chrono::steady_clock::now();uint32_t G=surface.resolution;
+                    if(auto top=findHighest()){size_t best=top->first;float hx=(float(best%G)/float(G-1)-.5f)*params.domain.x+params.domain.y,hz=(float(best/G)/float(G-1)-.5f)*params.domain.x+params.domain.z,hy=top->second;
                         std::erase_if(points,[](const Waypoint& w){return w.name=="Highest point"&&w.color==0xff5e5eu;});renamingPoint=highlightedPoint=-1;   /* one marker: a new search replaces the old one */
                         points.push_back({"Highest point",{hx,hy,hz},0xff5e5eu});centerOnPoint(points.back());
                         char text[160];std::snprintf(text,sizeof(text),"Highest: Y %.1f at X %.0f, Z %.0f (%u x %u grid, %.0f blocks per sample; %.0f ms)",hy,hx,hz,G,G,params.domain.x/float(G-1),std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count());highestStatus=text;}}
@@ -1231,7 +1238,8 @@ int main(int argc,char** argv){
                     glm::vec3 old=rayStart+ray**coarse;auto xz=[&](glm::vec3 a){return double(glm::length(glm::vec2(a.x-truth->x,a.z-truth->z)));};
                     oldXZ.push_back(xz(old));oldY.push_back(std::abs(old.y-truth->y)/exaggeration);newXZ.push_back(xz(*mesh));newY.push_back(std::abs(mesh->y-truth->y)/exaggeration);}
                 auto stats=[](std::vector<double> v){if(v.empty())return PresetJson{};std::sort(v.begin(),v.end());double sum=0;for(double x:v)sum+=x;return PresetJson{{"mean",sum/v.size()},{"median",v[v.size()/2]},{"p90",v[v.size()*9/10]},{"max",v.back()}};};
-                pickCheckReport={{"rays",options.pickCheck*options.pickCheck},{"missed",missed},{"grid",G},{"blocks_per_sample",spacing},{"old_xz",stats(oldXZ)},{"old_y",stats(oldY)},{"new_xz",stats(newXZ)},{"new_y",stats(newY)}};}
+                auto top=findHighest();size_t fullBest=size_t(std::max_element(field.begin(),field.end())-field.begin());
+                pickCheckReport={{"highest_bands",top?PresetJson{top->first,top->second}:PresetJson{}},{"highest_full",{fullBest,field[fullBest]}},{"rays",options.pickCheck*options.pickCheck},{"missed",missed},{"grid",G},{"blocks_per_sample",spacing},{"old_xz",stats(oldXZ)},{"old_y",stats(oldY)},{"new_xz",stats(newXZ)},{"new_y",stats(newY)}};}
             if(detailTool&&(ImGui::IsAnyItemActive()||io.MouseWheel!=0))detailLastEdit=elapsed;
             {static uint64_t editSeen=0;if(detailAuto&&revision!=editSeen){if(editSeen)detailLastEdit=elapsed;editSeen=revision;}} /* settings changed: the finer patch uses 256 samples until they settle */
             detailScreen={};detailCoverageLimited=false;
