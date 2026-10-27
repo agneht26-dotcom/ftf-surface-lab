@@ -67,6 +67,6 @@ powershell -File build.ps1 -Bootstrap
 ## Credits and licences
 
 - Terrain generation: [FreeTerraForged](https://github.com/etcodehome/freeterraforged) (MIT licence, copyright ReTerraForged; full text in `LICENSES/FreeTerraForged-MIT.txt`, or `notices/` in the release zip). The terrain code here is a port of FTF's, and FTF's presets in `assets/ftf-presets` are FTF's own. Unofficial: not made or endorsed by the FreeTerraForged developers.
-- Erosion filter: `shaders/ftf_filters.glsl` ports FTF's erosion filter, which is based on Rune Skovbo Johansen's (runevision) Phacelle Noise / Fast & Gorgeous Erosion Filter and is under the Mozilla Public License 2.0. That file stays under MPL-2.0 (notice and acknowledgement in `LICENSES/Erosion-MPL-2.0.txt`); its source is this repository.
+- Erosion filter: `shaders/ftf_filters.glsl` is a derived work of FTF's `Erosion.java` (its erosion filter re-implemented in GLSL for the GPU), which is based on Rune Skovbo Johansen's (runevision) Phacelle Noise / Fast & Gorgeous Erosion Filter and is under the Mozilla Public License 2.0. That one file is therefore also under MPL-2.0 (notice, what was changed and the original acknowledgement in `LICENSES/Erosion-MPL-2.0.txt`); the rest of the program is not.
 - Minecraft biome, block and surface-rule data are derived from Minecraft 1.21.1. Minecraft is a trademark of Mojang/Microsoft.
 - Libraries: GLFW, Dear ImGui, volk, Vulkan-Headers, GLM, nlohmann/json and miniz, each under its own licence (see `third_party/*/LICENSE*` after bootstrapping, or `notices/` in the release zip).

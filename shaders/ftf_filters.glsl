@@ -1,7 +1,9 @@
 // This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of the MPL was not
 // distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
-// Erosion filter ported from FreeTerraForged's Erosion.java, based on Rune Skovbo Johansen's (runevision) Phacelle Noise /
-// Fast & Gorgeous Erosion Filter: https://gist.github.com/runevision/c867c458f06284ad4c0f8aa3b974bc59 (see LICENSES/Erosion-MPL-2.0.txt).
+// Derived work of FreeTerraForged's Erosion.java (MPL-2.0): its erosion filter re-implemented in GLSL for the GPU, on a
+// preview height grid, with each FTF build's constants. Erosion.java is based on Rune Skovbo Johansen's (runevision)
+// Phacelle Noise / Fast & Gorgeous Erosion Filter: https://gist.github.com/runevision/c867c458f06284ad4c0f8aa3b974bc59
+// This whole file is under the MPL-2.0; the rest of the program is not. Details: LICENSES/Erosion-MPL-2.0.txt.
 #include "ftf_sin.glsl"
 // Tile-filter math recovered from CliffRelaxation/Erosion. Neighbors are sampled
 // in world-block distances, interpolating the selected preview grid at coarse LOD.
