@@ -1,0 +1,57 @@
+{
+  "ftf_build": "freeterraforged-1.0.0010-22oct",
+  "minecraft": "1.21.1",
+  "pack_format": 48,
+  "jar_sha256": "72a44d6ea94668769c8ab022dac85292fab5c88db564ddec169b9af2fa32bcff",
+  "erosion_engine": "Phacelle world filter with cliff relaxation",
+  "source_classes": {
+    "etcodehome/freeterraforged/world/worldgen/WorldFilters.class": "3362df98fc67460822884477e7668456ab224e5ce9ff50da5a9b1aeaa8527edd",
+    "etcodehome/freeterraforged/world/worldgen/densityfunction/tile/filter/Erosion.class": "5fb8eff5455dfda797b52c3826c2e11d56aca310478a045ae16dc0fcdd778858",
+    "etcodehome/freeterraforged/world/worldgen/densityfunction/tile/filter/CliffRelaxation.class": "f104fdcd8297e0b59a97f2418c0cd15ac477ad3b802defa29fc998520eb2a022"
+  },
+  "bundled_templates": {
+    "assets\\ftf-default-datapack.zip": "15e21946b3fcd7d58db7d2c5d90977871afe3e168d8ddeda4577a70b29b3ea91",
+    "assets\\ftf-datapack-template.zip": "ea6b2ecd948cd71d28dfcb013e0ea3ec31e303e103da1b6ca18951cd4078770e"
+  },
+  "gpu_erosion": {
+    "shaders\\ftf_filters.glsl": "96b04eb7f792d801de85f686ed70f2198bd5b83cd106e7abcb6c358081437cf5",
+    "shaders\\world_filter.comp": "543716f2ebf9e95b9d345f0f0158a9f6ffa9f130c1decf2c2771f1029639d646"
+  },
+  "biomes": {
+    "minecraft": "1.21.1",
+    "runtime_assets": {
+      "assets\\biomes-1.21.1.bin": "5e36ebe922b66374c29b6ac93f5d334bd77646180730ebca3c7d27c5fb08515c",
+      "assets\\biomes-1.21.1.json": "b68ae0285944a4f1bc104c28885651e67b8c5b8ed452686b4aad0cfd3d79eac8"
+    },
+    "official_sources": {
+      "client": {
+        "sha1": "30c73b1c5da787909b2f73340419fdf13b9def88",
+        "size": 26836906,
+        "url": "https://piston-data.mojang.com/v1/objects/30c73b1c5da787909b2f73340419fdf13b9def88/client.jar"
+      },
+      "server": {
+        "sha1": "59353fb40c36d304f2035d51e7d6e6baa98dc05c",
+        "size": 51627615,
+        "url": "https://piston-data.mojang.com/v1/objects/59353fb40c36d304f2035d51e7d6e6baa98dc05c/server.jar"
+      },
+      "server_mappings": {
+        "sha1": "03f8985492bda0afc0898465341eb0acef35f570",
+        "size": 7456063,
+        "url": "https://piston-data.mojang.com/v1/objects/03f8985492bda0afc0898465341eb0acef35f570/server.txt"
+      }
+    }
+  },
+  "surface_materials": {
+    "minecraft": "1.21.1",
+    "blocks": 1060,
+    "runtime_assets": {
+      "assets\\materials-1.21.1.bin": "eb64298f2abfb1bbeadacf092b75ea43390f3a3e90d2b301e24cabbf1ef086d6",
+      "assets\\materials-1.21.1.json": "33480816b8dd3df0b084916555b1e8e921bdfec9cab410ff387fb4590c01993f",
+      "assets\\minecraft-surface-rules.json": "d76ddf1b6aab66baf6adc314fd95298cb168263a4999a544e44013b0fb80d0be"
+    },
+    "shader_sources": {
+      "shaders\\materials.glsl": "45bfc869dfdfc2d66520c8d9ece540d91059d72736a11f24c5e2c7bc5fae3e96",
+      "shaders\\material_rules_generated.glsl": "6455dcd3730160b79a50e876df782e6de57b76c62fd461b39b3dd393f2aaa123"
+    }
+  }
+}

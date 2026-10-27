@@ -1,0 +1,30 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_fp64 : require
+#define FTF_CACHE_BUILD
+#include "shared.glsl"
+#include "ftf_terrain.glsl"
+#include "ftf_regions.glsl"
+#include "ftf_mountains.glsl"
+layout(local_size_x=64) in;
+void main(){
+    uint index=gl_GlobalInvocationID.x;if(index>=mountainCache.info.z)return;
+    uint instance=index/mountainCache.info.y,local=index%mountainCache.info.y,octave=local>=mountainCache.info.x?1u:0u;
+    uint begin=instance*mountainCache.info.y+(octave==1u?mountainCache.info.x:0u);
+    if(octave==1u)local-=mountainCache.info.x;
+    ivec4 bounds=mountainCache.bounds[octave];ivec2 position=ivec2(local%uint(bounds.z),local/uint(bounds.z)),cell=bounds.xy+position,lowestCell=cell;
+    uint type=mountainType(instance),first=type==0u?3u:type==1u?4u:6u,seed=mountainSeed(instance,first+1u);
+    precise float gridSize=octave==0u?128.0:128.0*.8;
+    precise vec2 a=(vec2(cell)+FTF_CELLS[ftfHash(seed,cell)&255u])*gridSize;
+    precise float lowest=3.402823466e38;
+    // The padded boundary is never queried. Avoid out-of-bounds cache reads.
+    if(all(greaterThan(position,ivec2(0)))&&all(lessThan(position,bounds.zw-1))){
+        for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x){
+            uint at=begin+uint((position.y+y)*bounds.z+position.x+x);float value=mountainCache.heights[at];
+            if(value<lowest){lowest=value;lowestCell=cell+ivec2(x,y);}
+        }
+    }
+    precise vec2 b=(vec2(lowestCell)+FTF_CELLS[ftfHash(seed,lowestCell)&255u])*gridSize;
+    uint at=mountainCache.info.z+index*4u;
+    mountainCache.heights[at]=a.x;mountainCache.heights[at+1u]=a.y;mountainCache.heights[at+2u]=b.x;mountainCache.heights[at+3u]=b.y;
+}

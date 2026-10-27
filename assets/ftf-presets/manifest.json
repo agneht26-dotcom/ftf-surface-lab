@@ -1,0 +1,70 @@
+{
+  "source": "Recovered constructors from freeterraforged-1.0.0010-22oct; matches the seven PresetListPage template entries.",
+  "modern_default_matches_bundled_datapack": true,
+  "templates": [
+    {
+      "id": "modern-default",
+      "name": "Modern default (with rivers)",
+      "file": "modern-default.json",
+      "source_method": "modernDefaultWithRivers",
+      "sha256": "7e9f820cb1bab88561cf310856538b0ed61b6390d74ae6788625a844a7f39cf9"
+    },
+    {
+      "id": "community-1",
+      "name": "Community preset 1",
+      "file": "community-1.json",
+      "source_method": "makeCommunityPreset1",
+      "sha256": "1f627cd4dd1d08f6053a645ad3d4829dd6f830d267397c25721aa96fe2d9972f"
+    },
+    {
+      "id": "legacy-default",
+      "name": "Legacy default",
+      "file": "legacy-default.json",
+      "source_method": "makeLegacyDefault",
+      "sha256": "441569a9a9e46fc9bfd4d6a9061a8b301fd39769562b82e760731c69dc81dfb5"
+    },
+    {
+      "id": "beautiful",
+      "name": "Beautiful (legacy)",
+      "file": "beautiful.json",
+      "source_method": "makeLegacyBeautiful",
+      "sha256": "c47500942612e7624a40454f7668fba798f8921d18429e792b53b9cb7fbf042e"
+    },
+    {
+      "id": "huge-biomes",
+      "name": "Huge biomes (legacy)",
+      "file": "huge-biomes.json",
+      "source_method": "makeLegacyHugeBiomes",
+      "sha256": "c01fb71a675d6367d1d78b2349b34574a58296a5a4ad2221706deb38f92b1465"
+    },
+    {
+      "id": "lite",
+      "name": "Lite (legacy)",
+      "file": "lite.json",
+      "source_method": "makeLegacyLite",
+      "sha256": "66d3e758958ff63487d0e32421eed689da8d6c5171fe23ab8976e9fa3ef041ac"
+    },
+    {
+      "id": "vanillaish",
+      "name": "Vanilla-ish (legacy)",
+      "file": "vanillaish.json",
+      "source_method": "makeLegacyVanillaish",
+      "sha256": "1f9afc81cdf25d06d1ec461373dbf148a1ecc5789b951b98c22a2cdcea4d16a9"
+    }
+  ],
+  "source_hashes": {
+    "CaveSettings": "ee045ee5834c4b3fe9bab36af73ebaef6b0c512a3c24393d55af9055fc6a96c0",
+    "ClimateSettings": "6df67d70d02af03367bbf64773f9f604968c8a84217a0b192bd4f84630291f31",
+    "ErosionFilterSettings": "e76f44fd7c71e9c45e833303c0abdd4b39dfd21e61db1e6613960d58d10da25b",
+    "FlowSettings": "f6c4eb9ca9c9a7eb6b23ed694ff5868d21f4e50053f95a25eb453368c5137af0",
+    "IslandSettings": "0917b66ca897aace40cf23eb63d47e0a60308b4a89a4aae4a5aab57a8c8b1b0e",
+    "MiscellaneousSettings": "0b41448b74567e37eff1d362432cf6b8e41e49edd43ca07186ad4ab76c68c78d",
+    "PresentationSettings": "788b8a407128db1f64fa46f980db1b3dde047168c569404625183e7e8373301d",
+    "Preset": "d8da910dc039386a1c76beff9fddeddc8277b11c3c0584d9efea989fcc9106aa",
+    "Presets": "83c5cd59813546d075fb2f67e7fc8584aacdb846c2855076956a66491e85704a",
+    "RiverSettings": "9ab8314fd0f93fd1b73ae1c3bb413bbceae039bee673d9ea1e1245375d253540",
+    "SurfaceSettings": "9758c6afeba1be997c59c3bd3975684b61a6b5735fee916e0d4882211684b211",
+    "TerrainSettings": "6ea9e31e0cf9ce0dad1782d84c01999d6defc782aab69e92b8274b8a0dff8fb5",
+    "WorldSettings": "9110c16edf4a6ea533ed525c85c0296c15425a1f3887221c1aea445c6ccb5e9c"
+  }
+}

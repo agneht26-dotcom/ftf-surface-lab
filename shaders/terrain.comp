@@ -1,0 +1,83 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_fp64 : require
+#include "shared.glsl"
+#include "ftf_terrain.glsl"
+#include "ftf_regions.glsl"
+#include "ftf_mountains.glsl"
+#include "ftf_land.glsl"
+#include "ftf_mix.glsl"
+#include "ftf_world.glsl"
+#include "cell_state.glsl"
+layout(local_size_x=8,local_size_y=8) in;
+layout(constant_id=0) const uint GENERATOR=2u;
+layout(constant_id=1) const uint TERRAIN_PROFILE=0u;
+layout(rgba32f,set=0,binding=0) uniform image2D rawField;
+layout(rgba32f,set=0,binding=1) uniform readonly image2D worldMetadata;
+layout(rgba8,set=0,binding=2) uniform writeonly image2D colors;
+layout(push_constant) uniform Params {
+    uvec4 meta; // resolution, seed, validation mode, reserved
+    vec4 domain; // extent, origin x, origin z, reserved
+    vec4 land; // amplitude, noise scale, sea level, continent strength
+    vec4 detail; // mountain strength, detail strength, roughness, smoothing
+    vec4 climate; // temperature offset, moisture offset, region scale, reserved
+    uvec4 seeds0;
+    uvec4 seeds1;
+    vec4 ftfScales;
+} p;
+void main() {
+    uvec2 q=gl_GlobalInvocationID.xy;
+    uint n=p.meta.x;
+    if(any(greaterThanEqual(q,uvec2(n)))) return;
+    // Match Java's rounded division at the coordinate boundary. Plain GLSL
+    // float division may use an approximate reciprocal, magnified far away.
+    precise vec2 fraction=vec2(dvec2(q)/double(n-1));
+    precise vec2 world=(fraction-.5)*p.domain.x+p.domain.yz;
+    if(GENERATOR==1u) {
+        precise vec2 noisePosition=vec2(dvec2(world)/double(p.land.y));
+        imageStore(rawField,ivec2(q),vec4(ftfPerlin(noisePosition,p.meta.y),0,noisePosition));
+        imageStore(colors,ivec2(q),vec4(.3,.6,.4,0)); return;
+    }
+    if(GENERATOR==3u){
+        vec4 region=ftfRegions(world,p.seeds0,p.detail.x);
+        vec3 color=.48+.36*cos(6.2831853*(region.x+vec3(0,.33,.67)));
+        color=mix(color*.22,color,region.y);
+        imageStore(rawField,ivec2(q),region);imageStore(colors,ivec2(q),vec4(color,0));return;
+    }
+    if(GENERATOR==6u){
+        vec4 continent=ftfUplift(world);vec3 color=mix(vec3(.05,.20,.33),vec3(.27,.60,.28),smoothstep(graph.controlPoints.y,graph.controlPoints.w,continent.x));
+        imageStore(rawField,ivec2(q),continent);imageStore(colors,ivec2(q),vec4(color,0));return;
+    }
+    float h;vec3 mixed=vec3(0);
+    if(GENERATOR==5u){mixed=ftfUpliftSurface(world,imageLoad(worldMetadata,ivec2(q)),imageLoad(rawField,ivec2(q)).x,p.ftfScales.x,p.land.x/850.0);h=mixed.x;}
+    else if(GENERATOR==4u){mixed=ftfLandMix(world,p.seeds0,p.ftfScales.x,p.land.x/850.0,p.land.z,p.ftfScales.w);h=mixed.x;}
+    else if(GENERATOR==2u){
+        precise float frequency=float(1.0/double(p.ftfScales.x));
+        precise vec2 terrainPosition=world*frequency;
+        h=ftfIsolatedTerrain(terrainPosition,TERRAIN_PROFILE,p.seeds0,p.seeds1.x,int(p.seeds1.y),p.land.x/850.0,p.land.z,p.ftfScales.y,p.ftfScales.z,p.ftfScales.w);
+    }else{
+    vec2 x=world/max(p.land.y,1.0);
+    vec2 warp=vec2(fbm(x*.3,p.meta.y+41u,3,.5),fbm(x*.3,p.meta.y+117u,3,.5));
+    x+=warp*1.35;
+    float continents=fbm(x*.22,p.meta.y+331u,4,.5);
+    float hills=fbm(x,p.meta.y,5,p.detail.z);
+    float ridges=pow(max(0.0,1.0-abs(fbm(x*.8,p.meta.y+875u,5,.5))*2.4),3.0);
+    float mountainMask=smoothstep(-.08,.38,fbm(x*.32,p.meta.y+242u,3,.5));
+    float small=fbm(x*7.0,p.meta.y+1337u,3,.5);
+    h=p.land.z+p.land.x*(continents*p.land.w+hills*.36+ridges*mountainMask*p.detail.x+small*p.detail.y-.15);
+    }
+    if(GENERATOR==5u){uint index=q.y*n+q.x;cells[index].erosion=terrainBiome.x;cells[index].weirdness=terrainBiome.y;cells[index].biome=0u;imageStore(rawField,ivec2(q),vec4(h,mixed.y,0,0));imageStore(colors,ivec2(q),vec4(0,0,0,mixed.z/255.0));return;}
+    float temperature=clamp(.55+fbm(world/max(p.climate.z,1.0),p.meta.y+901u,3,.5)*.9+p.climate.x-max(0,h-p.land.z)*.00065,0,1);
+    float moisture=clamp(.5+fbm(world/max(p.climate.z,1.0),p.meta.y+1901u,3,.5)*1.1+p.climate.y,0,1);
+    // Development climate palette, explicitly not verified FTF biome IDs.
+    vec3 color=vec3(.24,.43,.22);float biome=0;
+    if(moisture>.58) { color=vec3(.105,.30,.20);biome=1; }
+    if(temperature>.62&&moisture<.43) { color=vec3(.67,.57,.32);biome=2; }
+    if(temperature<.32) { color=vec3(.32,.42,.36);biome=3; }
+    if(temperature<.19) { color=vec3(.80,.85,.84);biome=4; }
+    if(h<p.land.z+3&&h>p.land.z-4) color=vec3(.67,.64,.43);
+    if(h<p.land.z) {color=mix(vec3(.08,.25,.31),vec3(.16,.39,.44),exp((h-p.land.z)/45.0));biome=5;}
+    if(GENERATOR==5u&&mixed.z==69.0)color=vec3(.67,.64,.43);
+    imageStore(rawField,ivec2(q),vec4(h,(GENERATOR==4u||GENERATOR==5u)?mixed.y:p.land.z,temperature,moisture));
+    imageStore(colors,ivec2(q),vec4(color,((GENERATOR==4u||GENERATOR==5u)?mixed.z:biome)/255.0));
+}

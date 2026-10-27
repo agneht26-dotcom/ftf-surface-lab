@@ -1,0 +1,39 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_fp64 : require
+#define FTF_MAP_PASS
+#include "shared.glsl"
+#include "ftf_terrain.glsl"
+#include "ftf_regions.glsl"
+#include "ftf_world.glsl"
+#include "ftf_islands.glsl"
+#include "cell_state.glsl"
+#include "ftf_filters.glsl"
+layout(local_size_x=8,local_size_y=8) in;
+layout(rgba32f,set=0,binding=0) uniform image2D rawField;
+layout(rgba8,set=0,binding=2) uniform image2D colors;
+layout(push_constant) uniform Params {uvec4 meta;vec4 domain;vec4 land;vec4 detail;vec4 climate;uvec4 seeds0;uvec4 seeds1;vec4 ftfScales;} p;
+void main(){
+    uvec2 q=gl_GlobalInvocationID.xy;uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;
+    precise vec2 fraction=vec2(dvec2(q)/double(n-1)),world=(fraction-.5)*p.domain.x+p.domain.yz;
+    vec4 field=imageLoad(rawField,ivec2(q));float choice=round(imageLoad(colors,ivec2(q)).a*255.0);
+    vec3 mixed=vec3(worldDiv(field.x,graph.worldLevels.w),field.y,choice);
+    if(graph.islandMeta.x!=0u&&choice>=65.0)mixed=ftfIslands(world*worldDiv(1.0,p.ftfScales.x),mixed);
+    if(mixed.z>=68.0&&mixed.x>worldDiv(min(graph.worldLevels.z-1.0,graph.worldLevels.w),graph.worldLevels.w)){cells[q.y*n+q.x].erosion=.25;cells[q.y*n+q.x].weirdness=(-.4-.26666668)*.5;}
+    if(graph.filterMeta2.z!=0u&&graph.mountainMeta.z!=0u)mixed.x=ftfCeilingNorm(mixed.x,graph.worldLevels.w,graph.filter5.y); // 1.0.0013+: ceiling is part of the terrain stage, before rivers
+    mixed.x*=graph.worldLevels.w;float h=mixed.x;
+    uint index=q.y*n+q.x;cells[index].riverMask=1.0;cells[index].sediment=0.0;cells[index].terrain=terrainFromChoice(uint(mixed.z));cells[index].waterHeight=0.0;cells[index].gateMin=0.0;
+    float temperature=clamp(.55+fbm(world/max(p.climate.z,1.0),p.meta.y+901u,3,.5)*.9+p.climate.x-max(0,h-p.land.z)*.00065,0,1);
+    float moisture=clamp(.5+fbm(world/max(p.climate.z,1.0),p.meta.y+1901u,3,.5)*1.1+p.climate.y,0,1);
+    // Development climate palette, explicitly not verified FTF biome IDs.
+    vec3 color=vec3(.24,.43,.22);float biome=0;
+    if(moisture>.58) { color=vec3(.105,.30,.20);biome=1; }
+    if(temperature>.62&&moisture<.43) { color=vec3(.67,.57,.32);biome=2; }
+    if(temperature<.32) { color=vec3(.32,.42,.36);biome=3; }
+    if(temperature<.19) { color=vec3(.80,.85,.84);biome=4; }
+    if(h<p.land.z+3&&h>p.land.z-4) color=vec3(.67,.64,.43);
+    if(h<p.land.z) {color=mix(vec3(.08,.25,.31),vec3(.16,.39,.44),exp((h-p.land.z)/45.0));biome=5;}
+    if(mixed.z==69.0)color=vec3(.67,.64,.43);
+    imageStore(rawField,ivec2(q),vec4(h,mixed.y,temperature,moisture));
+    imageStore(colors,ivec2(q),vec4(color,mixed.z/255.0));
+}

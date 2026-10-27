@@ -1,0 +1,22 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_fp64 : require
+#include "shared.glsl"
+layout(local_size_x=8,local_size_y=8) in;
+layout(rgba32f,set=0,binding=0) uniform readonly image2D rawField;
+layout(rgba32f,set=0,binding=1) uniform writeonly image2D surfaceField;
+layout(push_constant) uniform Params { uvec4 meta; vec4 domain; vec4 land; vec4 detail; vec4 climate; uvec4 seeds0; uvec4 seeds1; vec4 ftfScales; } p;
+void main() {
+    uvec2 q=gl_GlobalInvocationID.xy;uint n=p.meta.x;
+    if(any(greaterThanEqual(q,uvec2(n))))return;
+    vec4 s=imageLoad(rawField,ivec2(q));
+    if(p.detail.w>0&&p.meta.z==0u) {
+        float height=0;
+        for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x){
+            ivec2 c=clamp(ivec2(q)+ivec2(x,y),ivec2(0),ivec2(n)-1);
+            height+=imageLoad(rawField,c).x;
+        }
+        s.x=mix(s.x,height/9.0,p.detail.w);
+    }
+    imageStore(surfaceField,ivec2(q),s);
+}

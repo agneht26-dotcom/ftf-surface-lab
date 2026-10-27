@@ -1,0 +1,21 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_fp64 : require
+#define FTF_MAP_PASS
+#include "shared.glsl"
+#include "ftf_terrain.glsl"
+#include "ftf_regions.glsl"
+#include "ftf_world.glsl"
+layout(local_size_x=8,local_size_y=8) in;
+layout(rgba32f,set=0,binding=0) uniform writeonly image2D oceanScratch;
+layout(rgba32f,set=0,binding=1) uniform readonly image2D worldMetadata;
+layout(push_constant) uniform Params {uvec4 meta;vec4 domain;vec4 land;vec4 detail;vec4 climate;uvec4 seeds0;uvec4 seeds1;vec4 ftfScales;} p;
+void main(){
+    uvec2 q=gl_GlobalInvocationID.xy;uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;
+    float edge=imageLoad(worldMetadata,ivec2(q)).x;float height=0.0;
+    if(edge<=graph.controlPoints.w){
+        precise vec2 fraction=vec2(dvec2(q)/double(n-1)),world=(fraction-.5)*p.domain.x+p.domain.yz;
+        precise float frequency=worldDiv(1.0,p.ftfScales.x);height=continentOcean(world*frequency,edge);
+    }
+    imageStore(oceanScratch,ivec2(q),vec4(height,0,0,0));
+}

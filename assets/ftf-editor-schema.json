@@ -1,0 +1,441 @@
+{
+  "source": "Page links and widget insertion order recovered from freeterraforged-1.0.0010-22oct.jar",
+  "sections": [
+    "world",
+    "surface",
+    "underground",
+    "climate",
+    "terrain",
+    "rivers",
+    "island",
+    "erosionFilters",
+    "miscellaneous"
+  ],
+  "order": {
+    "/world": [
+      "continent",
+      "controlPoints",
+      "properties"
+    ],
+    "/world/continent": [
+      "continentType",
+      "continentShape",
+      "continentScale",
+      "continentJitter",
+      "continentSkipping",
+      "continentSizeVariance",
+      "continentNoiseOctaves",
+      "continentNoiseGain",
+      "continentNoiseLacunarity"
+    ],
+    "/world/controlPoints": [
+      "islandInland",
+      "islandCoast",
+      "deepOcean",
+      "shallowOcean",
+      "beach",
+      "coast",
+      "inland"
+    ],
+    "/world/properties": [
+      "spawnType",
+      "worldHeight",
+      "worldDepth",
+      "oceanDepth",
+      "seaLevel",
+      "lavaLevel",
+      "spawnX",
+      "spawnZ"
+    ],
+    "/surface/erosion": [
+      "rockSteepness",
+      "screeSteepness",
+      "dirtSteepness",
+      "rockVariance",
+      "rockMin",
+      "dirtVariance",
+      "dirtMin"
+    ],
+    "/caves": [
+      "entranceCaveProbability",
+      "cheeseCaveDepthOffset",
+      "cheeseCaveProbability",
+      "spaghettiCaveProbability",
+      "noodleCaveProbability",
+      "ravineCarverProbability",
+      "largeOreVeins"
+    ],
+    "/climate": [
+      "temperature",
+      "altitudeCoolingStrength",
+      "moisture",
+      "rainShadowStrength",
+      "coastalMoistureBoost",
+      "biomeShape",
+      "biomeEdgeShape"
+    ],
+    "/climate/temperature": [
+      "seedOffset",
+      "scale",
+      "falloff",
+      "min",
+      "max",
+      "distributionBias",
+      "bias"
+    ],
+    "/climate/moisture": [
+      "seedOffset",
+      "scale",
+      "falloff",
+      "min",
+      "max",
+      "distributionBias",
+      "bias"
+    ],
+    "/climate/biomeShape": [
+      "biomeSize",
+      "macroNoiseSize",
+      "biomeWarpScale",
+      "biomeWarpStrength",
+      "undergroundBiomeSize",
+      "undergroundBiomeVerticalSize",
+      "undergroundBiomeCoverage",
+      "undergroundBiomeClimateInfluence",
+      "undergroundBiomeBanding"
+    ],
+    "/climate/biomeEdgeShape": [
+      "type",
+      "scale",
+      "octaves",
+      "gain",
+      "lacunarity",
+      "strength"
+    ],
+    "/terrain": [
+      "general",
+      "steppe",
+      "plains",
+      "hills",
+      "dales",
+      "plateau",
+      "badlands",
+      "torridonian",
+      "mountains",
+      "volcano"
+    ],
+    "/terrain/general": [
+      "terrainSeedOffset",
+      "terrainRegionSize",
+      "globalVerticalScale",
+      "globalHorizontalScale",
+      "fancyMountains",
+      "legacyMountainScaling",
+      "mountainVariety"
+    ],
+    "/terrain/*": [
+      "weight",
+      "baseScale",
+      "verticalScale",
+      "horizontalScale"
+    ],
+    "/rivers": [
+      "seedOffset",
+      "riverCount",
+      "mainRivers",
+      "branchRivers",
+      "lakes",
+      "wetlands"
+    ],
+    "/flow": [
+      "flowParticles",
+      "boatFlowDynamics",
+      "navigableWaterfalls"
+    ],
+    "/rivers/mainRivers": [
+      "bedDepth",
+      "minBankHeight",
+      "maxBankHeight",
+      "bedWidth",
+      "bankWidth",
+      "fade"
+    ],
+    "/rivers/branchRivers": [
+      "bedDepth",
+      "minBankHeight",
+      "maxBankHeight",
+      "bedWidth",
+      "bankWidth",
+      "fade"
+    ],
+    "/rivers/lakes": [
+      "chance",
+      "minStartDistance",
+      "maxStartDistance",
+      "depth",
+      "sizeMin",
+      "sizeMax",
+      "minBankHeight",
+      "maxBankHeight"
+    ],
+    "/rivers/wetlands": [
+      "chance",
+      "sizeMin",
+      "sizeMax"
+    ],
+    "/island": [
+      "enableArchipelago",
+      "islandDensity",
+      "macroDensityPercentage",
+      "volcanoChance",
+      "mountainChance",
+      "islandSize",
+      "islandHeight",
+      "islandBaseScale",
+      "islandHorizontalScale",
+      "islandVerticalScale",
+      "mountainScale",
+      "volcanismScale",
+      "mountainHorizontalScale",
+      "volcanismHorizontalScale",
+      "offshoreDepth",
+      "beachWidth",
+      "beachCoverage"
+    ],
+    "/erosionFilters": [
+      "scale",
+      "strengthMultiplier",
+      "gullySharpness",
+      "flowOctaves",
+      "lacunarity",
+      "gain",
+      "phacelleScale",
+      "phacelleOffset",
+      "phacelleNormalization",
+      "slopeOnsetBase",
+      "slopeOnsetRidge",
+      "slopeOnsetOctave",
+      "roundingMin",
+      "roundingMax"
+    ],
+    "/miscellaneous": [
+      "smoothLayerDecorator",
+      "strataRegionSize",
+      "strataDecorator",
+      "oreCompatibleStoneOnly",
+      "plainStoneErosion",
+      "naturalSnowDecorator",
+      "customBiomeFeatures",
+      "vanillaSprings",
+      "vanillaLavaLakes",
+      "vanillaLavaSprings",
+      "mountainBiomeUsage",
+      "volcanoBiomeUsage"
+    ]
+  },
+  "ranges": {
+    "/world/continent/continentScale": [
+      100,
+      10000
+    ],
+    "/world/continent/continentNoiseOctaves": [
+      1,
+      10
+    ],
+    "/world/continent/continentNoiseLacunarity": [
+      1,
+      10
+    ],
+    "/world/properties/worldHeight": [
+      16,
+      1024
+    ],
+    "/world/properties/worldDepth": [
+      0,
+      1024
+    ],
+    "/world/properties/oceanDepth": [
+      10,
+      256
+    ],
+    "/world/properties/seaLevel": [
+      0,
+      255
+    ],
+    "/world/properties/lavaLevel": [
+      -1024,
+      128
+    ],
+    "/terrain/general/terrainRegionSize": [
+      125,
+      5000
+    ],
+    "/terrain/general/globalVerticalScale": [
+      0.01,
+      1
+    ],
+    "/terrain/general/globalHorizontalScale": [
+      0.01,
+      8
+    ],
+    "/climate/biomeShape/biomeSize": [
+      50,
+      2000
+    ],
+    "/climate/biomeShape/biomeWarpScale": [
+      1,
+      1000
+    ],
+    "/climate/biomeShape/biomeWarpStrength": [
+      0,
+      1000
+    ],
+    "/climate/temperature/bias": [
+      -1,
+      1
+    ],
+    "/climate/moisture/bias": [
+      -1,
+      1
+    ],
+    "/island/islandDensity": [
+      0,
+      1
+    ],
+    "/island/islandSize": [
+      50,
+      500
+    ],
+    "/island/islandHeight": [
+      0.1,
+      3
+    ],
+    "/island/islandBaseScale": [
+      0.1,
+      2
+    ],
+    "/island/islandVerticalScale": [
+      0.1,
+      3
+    ],
+    "/island/islandHorizontalScale": [
+      0.1,
+      10
+    ],
+    "/island/mountainChance": [
+      0,
+      1
+    ],
+    "/island/mountainScale": [
+      0,
+      1
+    ],
+    "/island/volcanoChance": [
+      0,
+      1
+    ],
+    "/island/volcanismScale": [
+      0,
+      1
+    ],
+    "/island/volcanismHorizontalScale": [
+      0.1,
+      3
+    ],
+    "/island/mountainHorizontalScale": [
+      0.1,
+      3
+    ],
+    "/island/offshoreDepth": [
+      0.1,
+      1
+    ],
+    "/island/beachWidth": [
+      0.05,
+      0.5
+    ],
+    "/island/beachCoverage": [
+      0,
+      1
+    ],
+    "/island/macroDensityPercentage": [
+      0,
+      1
+    ],
+    "/climate/temperature/distributionBias": [
+      -3,
+      3
+    ],
+    "/climate/moisture/distributionBias": [
+      -3,
+      3
+    ],
+    "/climate/altitudeCoolingStrength": [
+      0,
+      5
+    ],
+    "/climate/rainShadowStrength": [
+      0,
+      5
+    ],
+    "/climate/coastalMoistureBoost": [
+      0,
+      1
+    ],
+    "/erosionFilters/scale": [
+      0.01,
+      4.0
+    ],
+    "/erosionFilters/strengthMultiplier": [
+      0.001,
+      200.0
+    ],
+    "/erosionFilters/gullySharpness": [
+      0.001,
+      1.0
+    ],
+    "/erosionFilters/flowOctaves": [
+      1.0,
+      8.0
+    ],
+    "/erosionFilters/lacunarity": [
+      0.01,
+      5.0
+    ],
+    "/erosionFilters/gain": [
+      0.01,
+      1.0
+    ],
+    "/erosionFilters/phacelleScale": [
+      0.01,
+      5.0
+    ],
+    "/erosionFilters/phacelleOffset": [
+      0.0,
+      1.0
+    ],
+    "/erosionFilters/phacelleNormalization": [
+      0.0,
+      1.0
+    ],
+    "/erosionFilters/slopeOnsetBase": [
+      0.1,
+      5.0
+    ],
+    "/erosionFilters/slopeOnsetRidge": [
+      0.0,
+      5.0
+    ],
+    "/erosionFilters/slopeOnsetOctave": [
+      0.01,
+      5.0
+    ],
+    "/erosionFilters/roundingMin": [
+      0.01,
+      200.0
+    ],
+    "/erosionFilters/roundingMax": [
+      0.01,
+      200.0
+    ]
+  }
+}

@@ -1,0 +1,90 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_fp64 : require
+#extension GL_ARB_gpu_shader_int64 : require
+#define FTF_MAP_PASS
+#include "shared.glsl"
+#include "ftf_terrain.glsl"
+#include "ftf_regions.glsl"
+#include "ftf_world.glsl"
+#include "cell_state.glsl"
+#include "ftf_sin.glsl"
+#include "ftf_rivers.glsl"
+layout(local_size_x=8,local_size_y=8) in;
+layout(constant_id=3) const bool INSPECTION=false;
+layout(constant_id=4) const bool RECOLOR_ONLY=false;
+layout(std430,set=0,binding=10) buffer Inspection {uvec4 request;vec4 values;uvec4 ids;vec4 extra;uint seen[32];} inspection;   // seen: biome-count bitset (request.w 2)
+layout(rgba32f,set=0,binding=0) uniform readonly image2D rawField;
+layout(rgba8,set=0,binding=2) uniform image2D colors;
+layout(std430,set=0,binding=7) readonly buffer BiomeTable {uint words[];} table;
+layout(push_constant) uniform Params {uvec4 meta;vec4 domain;vec4 land;vec4 detail;vec4 climate;uvec4 seeds0;uvec4 seeds1;vec4 ftfScales;} p;
+float biomeContinentalness(vec2 world,vec4 field,uint index){
+    uint type=cells[index].terrain&255u;float edge=field.y,deep=graph.controlPoints.x,shallow=graph.controlPoints.y,beach=graph.biomeOptions.x,inland=graph.controlPoints.w;
+    float normalized=worldDiv(field.x,graph.worldLevels.w),water=worldDiv(min(graph.worldLevels.z-1.0,graph.worldLevels.w),graph.worldLevels.w);
+    bool offshore=normalized<=water&&edge<beach&&type!=10u&&type!=11u&&type!=12u;
+    if(type==4u||(offshore&&edge<=deep)){if(deep<=0.0)return (-1.05-.455)*.5;float alpha=clamp(edge,0.0,deep)/deep;return min(-.4551,ftfLerp(-1.05+.05,-.455,alpha));}
+    if(type==5u){if(shallow<=deep)return (-.455-.19)*.5;float alpha=ftfMap(edge,deep,shallow)*.98;return max(-.4549,ftfLerp(-.455,-.19,alpha));}
+    if(offshore){if(beach<=deep)return (-.455-.19)*.5;float alpha=ftfMap(edge,deep,beach)*.98;return max(-.4549,ftfLerp(-.455,-.19,alpha));}
+    if(type==8u){float beachNoise=worldPerlin(world,graph.biomeSeeds2.z,20,1,2.0,.5)*5.0;if(field.x+beachNoise<min(graph.worldLevels.z-1.0,graph.worldLevels.w)+5.0)return ftfLerp(-.19,-.11,ftfMap(edge,shallow,beach));}
+    return ftfLerp((-.11+.03)*.5,1.0,ftfMap(edge,beach,inland));
+}
+int64_t nodeDistance(uint node,int query[7]){
+    uint offset=8u+node*16u;int64_t total=0L;
+    for(int a=0;a<7;++a){int lo=int(table.words[offset+uint(a)*2u]),hi=int(table.words[offset+uint(a)*2u+1u]);int d=max(lo-query[a],query[a]-hi);if(d>0)total+=int64_t(d)*int64_t(d);}
+    return total;
+}
+uint biomeSearch(uint root,int query[7]){
+    uint stack[128];int count=1;stack[0]=root;int64_t best=0x7fffffffffffffffL;uint result=0u;
+    while(count>0){uint node=stack[--count];int64_t distance=nodeDistance(node,query);if(distance>=best)continue;uint offset=8u+node*16u;int children=int(table.words[offset+15u]);uint first=table.words[offset+14u];
+        if(children<0){best=distance;result=first;}
+        else for(int i=children-1;i>=0;--i)stack[count++]=first+uint(i);
+    }
+    return result;
+}
+uint canonicalBiome(uint biome){if(biome>=table.words[1])return 0xffffffffu;uint footer=uint(table.words.length())-8u;if(table.words[footer]!=0x4654464du)return biome;uint alias=table.words[table.words[footer+6u]+biome];return (alias&131072u)!=0u?alias&65535u:biome;}
+bool swampBiome(uint biome){uint footer=uint(table.words.length())-8u;return biome==table.words[6]||biome==table.words[7]||(table.words[footer]==0x4654464du&&(table.words[table.words[footer+6u]+biome]&65536u)!=0u);}
+bool modRuleMatches(uint at,int query[7],uint base){bool source=base<32u?(table.words[at+1u]&(1u<<base))!=0u:base<64u?(table.words[at+2u]&(1u<<(base-32u)))!=0u:false;if(!source)return false;for(uint k=0u;k<7u;++k)if(query[k]<int(table.words[at+4u+k*2u])||query[k]>int(table.words[at+5u+k*2u]))return false;return true;}
+uint modBiome(uint biome,int query[7],vec2 world){
+ uint mask=graph.surfaceMeta.w>>1u,footer=uint(table.words.length())-8u;if(mask==0u||table.words[footer]!=0x4654464du)return biome;uint original=biome;
+ if((mask&1u)!=0u)biome=biomeSearch(table.words[footer+1u],query);
+ if((mask&2u)!=0u){float region=ftfPerlinNode(world,graph.regionSeeds.x+17311u,1800,2,2.0);if(region>((mask&1u)!=0u?.57:.35)){float r=ftfPerlinNode(world,graph.regionSeeds.x+17312u,2500,1,2.0);uint variant=r>.80?3u:r>.55?2u:1u;biome=biomeSearch(table.words[footer+1u+variant],query);}}
+ if((mask&4u)!=0u){uint data=table.words[footer+5u],count=table.words[data],total=100u;for(uint i=0u;i<count;++i){uint at=data+1u+i*20u;if(modRuleMatches(at,query,original))total+=table.words[at+3u];}float region=ftfPerlinNode(world,graph.regionSeeds.x+51393u,900,2,2.0);uint choice=uint(clamp(region,0.0,.99999)*float(total));if(choice>=100u){choice-=100u;for(uint i=0u;i<count;++i){uint at=data+1u+i*20u;if(modRuleMatches(at,query,original)){uint weight=table.words[at+3u];if(choice<weight){biome=table.words[at];break;}choice-=weight;}}}}
+ return biome;
+}
+vec3 unpackRgb(uint rgb){return vec3((rgb>>16u)&255u,(rgb>>8u)&255u,rgb&255u)/255.0;}
+uint biomePerm(int value){return table.words[table.words[5]+(uint(value)&255u)];}
+const dvec2 BIOME_GRADIENTS[12]=dvec2[12](dvec2(1,1),dvec2(-1,1),dvec2(1,-1),dvec2(-1,-1),dvec2(1,0),dvec2(-1,0),dvec2(1,0),dvec2(-1,0),dvec2(0,1),dvec2(0,-1),dvec2(0,1),dvec2(0,-1));
+double biomeCorner(uint gradient,dvec2 p){precise double t=.5LF-p.x*p.x-p.y*p.y;if(t<0.0LF)return 0.0LF;t*=t;precise double v=BIOME_GRADIENTS[gradient].x*p.x+BIOME_GRADIENTS[gradient].y*p.y;return t*t*v;}
+double biomeInfoNoise(dvec2 p){
+    precise double s=(p.x+p.y)*.3660254037844386LF;ivec2 cell=ivec2(floor(p+dvec2(s)));precise double t=double(cell.x+cell.y)*.21132486540518713LF;
+    precise dvec2 a=p-(dvec2(cell)-dvec2(t));ivec2 step=a.x>a.y?ivec2(1,0):ivec2(0,1);precise dvec2 b=a-dvec2(step)+.21132486540518713LF,c=a-1.0LF+.42264973081037427LF;
+    uint ga=biomePerm(cell.x+int(biomePerm(cell.y)))%12u,gb=biomePerm(cell.x+step.x+int(biomePerm(cell.y+step.y)))%12u,gc=biomePerm(cell.x+1+int(biomePerm(cell.y+1)))%12u;
+    return 70.0LF*(biomeCorner(ga,a)+biomeCorner(gb,b)+biomeCorner(gc,c));
+}
+#include "materials.glsl"
+void main(){
+    if(INSPECTION&&inspection.request.w==2u){   // biome count: mark every canonical biome present in the grid
+        uvec2 q=gl_GlobalInvocationID.xy;uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;
+        uint b=canonicalBiome(cells[q.y*n+q.x].biome);if(b<1024u)atomicOr(inspection.seen[b>>5u],1u<<(b&31u));
+        return;
+    }
+    if(INSPECTION&&inspection.request.w!=0u){
+        uvec2 q=gl_GlobalInvocationID.xy;uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;
+        uint index=q.y*n+q.x;vec2 world=(vec2(q)/float(n-1)-.5)*p.domain.x+p.domain.yz;
+        if(distance(world,inspection.values.xy)<=inspection.values.z&&canonicalBiome(cells[index].biome)==canonicalBiome(inspection.request.x))atomicMin(inspection.request.z,index);
+        return;
+    }
+    if(INSPECTION&&any(notEqual(gl_GlobalInvocationID,uvec3(0))))return;
+    // domain.w: the first row of a progressive build's band (0 otherwise).
+    uvec2 q=INSPECTION?inspection.request.xy:gl_GlobalInvocationID.xy+uvec2(0u,uint(p.domain.w));uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;uint index=q.y*n+q.x;
+    precise vec2 fraction=vec2(dvec2(q)/double(n-1)),world=(fraction-.5)*p.domain.x+p.domain.yz;vec4 field=imageLoad(rawField,ivec2(q));
+    float continentalness=biomeContinentalness(world,field,index);int target[7];target[0]=int((field.z*2.0-1.0)*10000.0);target[1]=int((field.w*2.0-1.0)*10000.0);target[2]=int(continentalness*10000.0);target[3]=int(cells[index].erosion*10000.0);target[4]=0;target[5]=int(cells[index].weirdness*10000.0);target[6]=0;
+    uint root=(cells[index].terrain&255u)==10u?table.words[3]:table.words[2];uint biome=RECOLOR_ONLY?cells[index].biome:modBiome(biomeSearch(root,target),target,world);if(graph.biomeOptions.z>0.0)biome=uint(graph.biomeOptions.z)-1u;if(!INSPECTION)cells[index].biome=biome;
+    uint offset=table.words[4]+biome*4u,mode=graph.biomeSeeds2.w;vec3 color=unpackRgb(table.words[offset+min(mode,2u)]);
+    if(mode==1u&&swampBiome(biome))color=unpackRgb(biomeInfoNoise(dvec2(world)*.0225LF)<-.1LF?5011004u:6975545u);
+    float localWater=graph.worldLevels.z;if(cells[index].waterHeight>0.0)localWater=max(localWater,cells[index].waterHeight*graph.worldLevels.w+1.0);
+    if(INSPECTION){uint block=materialAt(world,field,index,biome,localWater);inspection.values=vec4(field.x,field.z,field.w,localWater);inspection.ids=uvec4(biome,cells[index].terrain&255u,block,uint(round(imageLoad(colors,ivec2(q)).a*255.0)));inspection.extra=vec4(world,cells[index].erosion,cells[index].weirdness);return;}
+    if(mode>0u&&mode<3u&&field.x<localWater)color=unpackRgb(table.words[offset+3u]);
+    if(mode==3u){uint block=materialAt(world,field,index,biome,localWater);color=graph.surfaceOptions.w>1.5?unpackRgb(materialDebug(int(graph.surfaceOptions.w)-2)):graph.surfaceOptions.w>0.0?unpackRgb(block):materialColor(block,biome,world);}
+    imageStore(colors,ivec2(q),vec4(color,imageLoad(colors,ivec2(q)).a));
+}

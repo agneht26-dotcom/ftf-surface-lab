@@ -1,0 +1,58 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_fp64 : require
+#define FTF_MAP_PASS
+#include "shared.glsl"
+#include "ftf_terrain.glsl"
+#include "ftf_regions.glsl"
+#include "ftf_world.glsl"
+#include "cell_state.glsl"
+#include "ftf_filters.glsl"
+layout(local_size_x=8,local_size_y=8) in;
+layout(constant_id=0) const uint PHASE=0u;
+layout(rgba32f,set=0,binding=0) uniform image2D rawField;
+layout(rgba32f,set=0,binding=1) uniform image2D intermediate;
+layout(rgba8,set=0,binding=2) uniform image2D colors;
+layout(push_constant) uniform Params {uvec4 meta;vec4 domain;vec4 land;vec4 detail;vec4 climate;uvec4 seeds0;uvec4 seeds1;vec4 ftfScales;} p;
+vec4 at(ivec2 q,bool second){q=clamp(q,ivec2(0),ivec2(p.meta.x)-1);return second?imageLoad(intermediate,q):imageLoad(rawField,q);}
+vec4 sampleGrid(vec2 q,bool second){q=clamp(q,vec2(0),vec2(p.meta.x-1));ivec2 lo=ivec2(floor(q));vec2 f=q-vec2(lo);return mix(mix(at(lo,second),at(lo+ivec2(1,0),second),f.x),mix(at(lo+ivec2(0,1),second),at(lo+1,second),f.x),f.y);}
+float normHeight(vec2 q,bool second){return worldDiv(sampleGrid(q,second).x,graph.worldLevels.w);}
+float modifierAt(uint index,float height,vec2 world){
+    if((cells[index].terrain&256u)!=0u)return 0.0;float modifier=1.0;
+    if((cells[index].terrain&255u)==1u){float edge=ftfRegions(world,graph.regionSeeds,float(graph.mixMeta.z)).y;modifier=ftfLerp(1.0,.3,ftfMap(edge,0.0,.15));}
+    if(cells[index].riverMask<.1)modifier*=ftfMap(cells[index].riverMask,.002,.1);
+    return ftfMap(height,worldDiv(min(graph.worldLevels.z,graph.worldLevels.w),graph.worldLevels.w),worldDiv(min(graph.worldLevels.z,graph.worldLevels.w)+15.0,graph.worldLevels.w))*modifier;
+}
+float gateAt(vec2 q){q=clamp(q,vec2(0),vec2(p.meta.x-1));ivec2 lo=ivec2(floor(q));vec2 f=q-vec2(lo);ivec2 hi=min(lo+1,ivec2(p.meta.x)-1);return mix(mix(cells[lo.y*p.meta.x+lo.x].gateMin,cells[lo.y*p.meta.x+hi.x].gateMin,f.x),mix(cells[hi.y*p.meta.x+lo.x].gateMin,cells[hi.y*p.meta.x+hi.x].gateMin,f.x),f.y);}
+void main(){
+    uvec2 q=gl_GlobalInvocationID.xy;uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;uint index=q.y*n+q.x;
+    precise vec2 fraction=vec2(dvec2(q)/double(n-1)),world=(fraction-.5)*p.domain.x+p.domain.yz;
+    // FTF 1.0.0010 tile filters sample their noise at Tile.getBlockX() + array index; the array starts one 32-block border
+    // before the tile, so every noise position is the block's own + (32, 32). Later versions: not verified, kept unshifted.
+    vec2 noiseWorld=graph.filterMeta2.x==0u?world+vec2(32.0):world;
+    vec2 point=vec2(q);float block=worldDiv(float(n-1),p.domain.x),factor=graph.worldLevels.w,wh=graph.filter3.z;
+    if(PHASE==6u){imageStore(rawField,ivec2(q),imageLoad(intermediate,ivec2(q)));return;}
+    if(PHASE<=1u||PHASE==8u){bool source=PHASE==1u;vec4 field=at(ivec2(q),source);float c=worldDiv(field.x,factor),m=PHASE==8u?modifierAt(index,c,world):cells[index].gateMin;
+        if(PHASE==8u)cells[index].gateMin=m;
+        if(m!=0.0){float l=normHeight(point-vec2(block,0),source),r=normHeight(point+vec2(block,0),source),d=normHeight(point-vec2(0,block),source),u=normHeight(point+vec2(0,block),source),avg=.25*(l+r+d+u),hi=max(max(c,l),max(max(r,d),u)),lo=min(min(c,l),min(min(r,d),u));
+            float rateMul=1.0+.5*filterCentered(noiseWorld,graph.filterMeta.z),reliefMul=1.0+.35*filterCentered(noiseWorld,graph.filterMeta.z+6007u),minRelief=worldDiv(3.0,wh),span=max(.00001,worldDiv(8.0,wh)-minRelief),t=clamp(worldDiv(hi-lo-minRelief*reliefMul,span*reliefMul),0.0,1.0),mask=t*t*(3.0-2.0*t),rate=min(.5,.4*rateMul);field.x=(c+m*((avg-c)*mask*rate))*factor;}
+        if(source)imageStore(rawField,ivec2(q),field);else imageStore(intermediate,ivec2(q),field);return;
+    }
+    if(PHASE==2u){float c=normHeight(point,false),l=normHeight(point-vec2(block,0),false),r=normHeight(point+vec2(block,0),false),d=normHeight(point-vec2(0,block),false),u=normHeight(point+vec2(0,block),false);
+        float sx=(q.x==0u?r-c:q.x==n-1?c-l:filterMinmod(c-l,r-c))*wh,sz=(q.y==0u?u-c:q.y==n-1?c-d:filterMinmod(c-d,u-c))*wh,envelope=c;
+        for(int y=-3;y<=3;++y)for(int x=-3;x<=3;++x)envelope=max(envelope,normHeight(point+vec2(x,y)*block,false));
+        imageStore(intermediate,ivec2(q),vec4(sx,sz,sqrt(sx*sx+sz*sz+.0000000001),envelope));return;
+    }
+    if(PHASE==3u){float value=sampleGrid(point,true).z;for(int y=-2;y<=2;++y)for(int x=-2;x<=2;++x)value=min(value,sampleGrid(point+vec2(x,y)*block,true).z);cells[index].gateMin=value;return;}
+    if(PHASE==4u){vec4 field=imageLoad(rawField,ivec2(q)),aux=imageLoad(intermediate,ivec2(q));float height=worldDiv(field.x,factor),water=worldDiv(min(graph.worldLevels.z-1.0,factor),factor);if((cells[index].terrain&256u)!=0u)return;
+        float sum=0.0,count=0.0;for(int y=-2;y<=2;++y)for(int x=-2;x<=2;++x){vec2 pos=point+vec2(x,y)*block;if(any(lessThan(pos,vec2(0)))||any(greaterThan(pos,vec2(n-1))))continue;sum+=gateAt(pos);count+=1.0;}
+        float sediment=cells[index].sediment,delta=filterErosionDelta(noiseWorld,height,aux.xy,worldDiv(sum,max(count,1.0)),aux.w,modifierAt(index,height,world),sediment);cells[index].sediment=sediment;float result=height+delta;
+        if(height>water&&result<=water)result=worldDiv(min(graph.worldLevels.z,factor),factor);field.x=result*factor;imageStore(rawField,ivec2(q),field);return;
+    }
+    if(PHASE==7u){float current=normHeight(point,false),gradient=0.0,water=worldDiv(min(graph.worldLevels.z-1.0,factor),factor);
+        for(int y=-1;y<=2;++y)for(int x=-1;x<=2;++x){if(x==0&&y==0)continue;vec2 pos=point+vec2(x,y)*block;if(any(lessThan(pos,vec2(0)))||any(greaterThan(pos,vec2(n-1))))continue;gradient+=abs(current-max(normHeight(pos,false),water));}cells[index].gateMin=gradient*10.0;
+        uint type=cells[index].terrain&255u;if(type==6u&&at(ivec2(q),false).y<graph.filter3.w){float gx=(normHeight(point+vec2(8*block,0),false)-normHeight(point-vec2(8*block,0),false))/17.0,gz=(normHeight(point-vec2(0,8*block),false)-normHeight(point+vec2(0,8*block),false))/17.0;
+            if(gx*gx+gz*gz<.275){cells[index].terrain=(cells[index].terrain&~255u)|8u;vec4 color=imageLoad(colors,ivec2(q));if(at(ivec2(q),false).x>=p.land.z)color.rgb=vec3(.67,.64,.43);imageStore(colors,ivec2(q),color);}}return;
+    }
+    if(PHASE==5u&&graph.filterMeta.w!=0u){vec4 field=imageLoad(rawField,ivec2(q));field.x=ftfCeilingNorm(worldDiv(field.x,factor),factor,wh)*factor;imageStore(rawField,ivec2(q),field);}
+}

@@ -1,0 +1,31 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_fp64 : require
+#define FTF_MAP_PASS
+#include "shared.glsl"
+#include "ftf_terrain.glsl"
+#include "ftf_regions.glsl"
+#include "ftf_world.glsl"
+#include "cell_state.glsl"
+#include "ftf_climate.glsl"
+layout(local_size_x=8,local_size_y=8) in;
+layout(rgba32f,set=0,binding=0) uniform image2D rawField;
+layout(rgba8,set=0,binding=2) uniform image2D colors;
+layout(push_constant) uniform Params {uvec4 meta;vec4 domain;vec4 land;vec4 detail;vec4 climate;uvec4 seeds0;uvec4 seeds1;vec4 ftfScales;} p;
+void main(){
+    uvec2 q=gl_GlobalInvocationID.xy;uint n=p.meta.x;if(any(greaterThanEqual(q,uvec2(n))))return;
+    precise vec2 fraction=vec2(dvec2(q)/double(n-1)),world=(fraction-.5)*p.domain.x+p.domain.yz;
+    vec4 field=imageLoad(rawField,ivec2(q)),encoded=imageLoad(colors,ivec2(q));float assignment=round(encoded.a*255.0);vec2 region;
+    vec2 climate=ftfClimate(world,worldDiv(field.x,graph.worldLevels.w),q.y*n+q.x,region);field.zw=climate;
+    // Basic climate-zone palette. FTF climate values, not Minecraft registry biome IDs.
+    float temperature=climate.x,moisture=climate.y;vec3 color=vec3(.29,.48,.22);
+    if(moisture>.58)color=vec3(.10,.31,.17);
+    if(temperature>.62&&moisture<.43)color=vec3(.68,.58,.32);
+    if(temperature<.32)color=vec3(.29,.41,.34);
+    if(temperature<.19)color=vec3(.81,.86,.85);
+    color*=.94+.12*region.x;
+    if(assignment==69.0||(field.x<p.land.z+3&&field.x>p.land.z-4))color=vec3(.67,.64,.43);
+    float waterLevel=p.land.z;float localWater=cells[q.y*n+q.x].waterHeight;if(localWater>0.0)waterLevel=max(waterLevel,localWater*graph.worldLevels.w+1.0);
+    if(field.x<waterLevel)color=mix(vec3(.08,.25,.31),vec3(.16,.39,.44),exp((field.x-waterLevel)/45.0));
+    imageStore(rawField,ivec2(q),field);imageStore(colors,ivec2(q),vec4(color,encoded.a));
+}

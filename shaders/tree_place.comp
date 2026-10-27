@@ -1,0 +1,105 @@
+#version 450
+// Places preview trees on a jittered world-space grid around the camera focus. Reads the generated heights and biome ids of the
+// whole-world grid (set 0) and of the high-detail patch (set 1), and appends instances to per-(tree kind, LOD) segments.
+layout(local_size_x=8,local_size_y=8) in;
+struct Cell {float riverMask;float sediment;uint terrain;float waterHeight;float gateMin;float erosion;float weirdness;uint biome;};
+struct Instance {vec4 posScale;uvec4 misc;};
+layout(rgba32f,set=0,binding=1) uniform readonly image2D baseField;
+layout(std430,set=0,binding=5) readonly buffer BaseCells {Cell cell[];} baseCells;
+layout(std430,set=0,binding=7) readonly buffer BiomeTable {uint words[];} biomeTable;
+layout(std430,set=0,binding=11) buffer Instances {Instance item[];} instances;
+layout(std430,set=0,binding=12) buffer Args {uint words[];} args;
+layout(std430,set=0,binding=14) readonly buffer TreeTable {uvec4 row[];} table;
+layout(rgba32f,set=1,binding=1) uniform readonly image2D detailField;
+layout(std430,set=1,binding=5) readonly buffer DetailCells {Cell cell[];} detailCells;
+layout(rgba32f,set=2,binding=1) uniform readonly image2D ringField;
+layout(std430,set=2,binding=5) readonly buffer RingCells {Cell cell[];} ringCells;
+layout(push_constant) uniform Place {
+    vec4 window;       // centre x, centre z (absolute blocks), radius, cell size
+    vec4 baseDomain;   // extent, origin x, origin z, resolution
+    vec4 detailDomain; // extent, centre x, centre z, resolution (extent 0 = no patch)
+    vec4 world;        // sea level, terrain scale for river water, density multiplier, LOD split distance
+    uvec4 meta;        // type mask, cells per side, seed, segment capacity (top bit: counting pass)
+    vec4 detailPatch;  // patch render radius, LOD focus x/z, whole-map flag
+    vec4 view;         // camera heading x/z, cosine of the half view angle, test enabled
+    vec4 ringDomain;   // intermediate ring: extent, centre x, centre z, resolution (extent 0 = none)
+} pc;
+// Instance buffer layout: the 12 vanilla families (24 LOD segments) get large segments, every other species a small one.
+const uint BIG_SEGMENT=32768u;
+uint smallSegment(){return pc.meta.w&0x7fffffffu;}
+uint segmentBase(uint segment){return segment<24u?segment*BIG_SEGMENT:24u*BIG_SEGMENT+(segment-24u)*smallSegment();}
+uint segmentCapacity(uint segment){return segment<24u?BIG_SEGMENT:smallSegment();}
+uint countWord(uint segment){return uint(args.words.length())/5u*4u+segment;}   // per-segment counts follow the 4-word draw arguments
+uint hash(uint a,uint b,uint c){uint h=a*747796405u+2891336453u;h^=b*2246822519u+h*374761393u;h=(h^(h>>16))*2654435769u;h^=c*3266489917u;h=(h^(h>>15))*668265263u;h^=h>>13;return h;}
+float rnd(uint seed,int k){return float(hash(seed,uint(k),0x9e3779b9u)&0xffffffu)/16777216.0;}
+
+// Same two-triangle interpolation as the terrain mesh, so trees sit on the drawn surface.
+float interpolateBase(vec2 f,ivec2 size){
+    ivec2 a=min(ivec2(f),size-2);vec2 t=f-vec2(a);
+    float h00=imageLoad(baseField,a).x,h10=imageLoad(baseField,a+ivec2(1,0)).x,h01=imageLoad(baseField,a+ivec2(0,1)).x,h11=imageLoad(baseField,a+ivec2(1,1)).x;
+    return t.x+t.y<=1.0?h00+(h10-h00)*t.x+(h01-h00)*t.y:h11+(h01-h11)*(1.0-t.x)+(h10-h11)*(1.0-t.y);
+}
+float interpolateRing(vec2 f,ivec2 size){
+    ivec2 a=min(ivec2(f),size-2);vec2 t=f-vec2(a);
+    float h00=imageLoad(ringField,a).x,h10=imageLoad(ringField,a+ivec2(1,0)).x,h01=imageLoad(ringField,a+ivec2(0,1)).x,h11=imageLoad(ringField,a+ivec2(1,1)).x;
+    return t.x+t.y<=1.0?h00+(h10-h00)*t.x+(h01-h00)*t.y:h11+(h01-h11)*(1.0-t.x)+(h10-h11)*(1.0-t.y);
+}
+float interpolateDetail(vec2 f,ivec2 size){
+    ivec2 a=min(ivec2(f),size-2);vec2 t=f-vec2(a);
+    float h00=imageLoad(detailField,a).x,h10=imageLoad(detailField,a+ivec2(1,0)).x,h01=imageLoad(detailField,a+ivec2(0,1)).x,h11=imageLoad(detailField,a+ivec2(1,1)).x;
+    return t.x+t.y<=1.0?h00+(h10-h00)*t.x+(h01-h00)*t.y:h11+(h01-h11)*(1.0-t.x)+(h10-h11)*(1.0-t.y);
+}
+// Terrain height, biome and river/lake surface at an absolute world position; false outside the generated world.
+bool ground(vec2 p,out float height,out uint biome,out float waterTop){
+    height=0;biome=0;waterTop=-1e9;
+    float res=pc.baseDomain.w;vec2 uv=(p-pc.baseDomain.yz)/pc.baseDomain.x+.5;if(any(lessThan(uv,vec2(.001)))||any(greaterThan(uv,vec2(.999))))return false;
+    vec2 f=uv*(res-1.0);ivec2 size=ivec2(res);float baseHeight=interpolateBase(f,size);
+    ivec2 n=min(ivec2(f+.5),size-1);Cell c=baseCells.cell[uint(n.y)*uint(size.x)+uint(n.x)];biome=c.biome;if(c.waterHeight>0.0)waterTop=c.waterHeight*pc.world.y+1.0;height=baseHeight;
+    if(pc.ringDomain.x>0.0){   // the ring is drawn here instead of the base grid: use its heights, biomes and water
+        vec2 offset=p-pc.ringDomain.yz;
+        if(all(lessThan(abs(offset),vec2(pc.ringDomain.x*.5)))){float rres=pc.ringDomain.w;vec2 rf=clamp(offset/pc.ringDomain.x+.5,vec2(0),vec2(1))*(rres-1.0);ivec2 rsize=ivec2(rres);
+            height=interpolateRing(rf,rsize);baseHeight=height;ivec2 rn=min(ivec2(rf+.5),rsize-1);Cell r=ringCells.cell[uint(rn.y)*uint(rsize.x)+uint(rn.x)];biome=r.biome;waterTop=r.waterHeight>0.0?r.waterHeight*pc.world.y+1.0:-1e9;}
+    }
+    if(pc.detailDomain.x>0.0){
+        vec2 offset=p-pc.detailDomain.yz;float len=length(offset),R=pc.detailPatch.x;
+        if(len<R&&all(lessThan(abs(offset),vec2(pc.detailDomain.x*.5)))){
+            float dres=pc.detailDomain.w;vec2 df=clamp(offset/pc.detailDomain.x+.5,vec2(0),vec2(1))*(dres-1.0);ivec2 dsize=ivec2(dres);
+            float fine=interpolateDetail(df,dsize);height=mix(fine,baseHeight,smoothstep(R*.70,R*.94,len));
+            if(len<R*.94){ivec2 dn=min(ivec2(df+.5),dsize-1);Cell d=detailCells.cell[uint(dn.y)*uint(dsize.x)+uint(dn.x)];biome=d.biome;waterTop=d.waterHeight>0.0?d.waterHeight*pc.world.y+1.0:-1e9;}
+        }
+    }
+    return true;
+}
+void main(){
+    ivec2 g=ivec2(gl_GlobalInvocationID.xy);int side=int(pc.meta.y);if(g.x>=side||g.y>=side)return;
+    float cs=pc.window.w;ivec2 ci=ivec2(floor(pc.window.xy/cs))-side/2+g;vec2 centre=(vec2(ci)+.5)*cs;
+    if(distance(centre,pc.window.xy)>pc.window.z+cs)return;
+    if(pc.view.w>.5){vec2 toCell=centre-pc.detailPatch.yz;float away=length(toCell);if(away>pc.world.w*2.0&&dot(toCell/max(away,1e-3),pc.view.xy)<pc.view.z)return;}
+    uint seed=hash(uint(ci.x),uint(ci.y),pc.meta.z);
+    float h,w;uint b;if(!ground(centre,h,b,w))return;
+    float density=uintBitsToFloat(table.row[2u*b+1u].w)*pc.world.z;if(density<=0.0)return;
+    float lambda=density*cs*cs/256.0;int count=int(floor(lambda));if(rnd(seed,0)<fract(lambda))++count;count=min(count,pc.detailPatch.w>.5?24:8);
+    for(int k=0;k<count;++k){
+        vec2 p=(vec2(ci)+vec2(rnd(seed,1+k*5),rnd(seed,2+k*5)))*cs;float distanceToFocus=distance(p,pc.window.xy);if(distanceToFocus>pc.window.z)continue;
+        if(pc.detailPatch.w<.5&&distanceToFocus>pc.window.z*.5&&rnd(seed,5+k*5)>mix(1.0,.35,smoothstep(pc.window.z*.5,pc.window.z,distanceToFocus)))continue; // thin the far field
+        float ph,pw;uint pb;if(!ground(p,ph,pb,pw))continue;
+        if(ph<=max(pc.world.x,pw)+.1)continue;                               // no trees in oceans, lakes or rivers
+        uvec4 kinds=table.row[2u*pb];vec4 odds=uintBitsToFloat(table.row[2u*pb+1u]);if(odds.w<=0.0)continue;
+        float pick=rnd(seed,3+k*5);uint type=pick<odds.x?kinds.x:pick<odds.y?kinds.y:pick<odds.z?kinds.z:kinds.w;if(type==0xffffffffu)type=kinds.x;if(type==0xffffffffu)continue;
+        uint foot=uint(table.row.length())-1u;bool extended=table.row[foot].x==0x54524532u;uint spec=extended?table.row[foot].y*2u+type*2u:0u;
+        uvec4 info=extended?table.row[spec]:uvec4(type,0,0,0);uint family=info.x;
+        if(family>=12u||((pc.meta.x>>family)&1u)==0u)continue;
+        uint ub;float uw,hx0=ph,hx1=ph,hz0=ph,hz1=ph;
+        if(ground(p-vec2(1.5,0),hx0,ub,uw)&&ground(p+vec2(1.5,0),hx1,ub,uw)&&ground(p-vec2(0,1.5),hz0,ub,uw)&&ground(p+vec2(0,1.5),hz1,ub,uw)){if(max(abs(hx1-hx0),abs(hz1-hz0))>4.5)continue;} // too steep
+        uint lod=distance(p,pc.detailPatch.yz)>pc.world.w?1u:0u;uint segment=type*2u+lod;
+        uint capacity=segmentCapacity(segment);
+        if((pc.meta.w&0x80000000u)!=0u){atomicAdd(args.words[countWord(segment)],1u);continue;}   /* counting pass */
+        uint wanted=args.words[countWord(segment)];if(wanted>capacity&&rnd(seed,6+k*5)>=float(capacity)*.97/float(wanted))continue;   /* thin evenly to fit */
+        uint slot=atomicAdd(args.words[segment*4u+1u],1u);
+        if(slot>=capacity){atomicMin(args.words[segment*4u+1u],capacity);continue;}
+        float scale=.9+.2*rnd(seed,4+k*5);if(type>=12u&&extended){vec4 heights=uintBitsToFloat(table.row[spec+1u]);scale=mix(heights.x,heights.y,rnd(seed,4+k*5));}uint rotation=hash(seed,uint(k),7u)&3u;
+        uint foliage=biomeTable.words[biomeTable.words[4]+pb*4u+2u];
+        uint trunk=0u;if(type>=12u&&extended){trunk=info.y|0x80000000u;vec3 rgb=vec3((info.z>>16)&255u,(info.z>>8)&255u,info.z&255u)/255.0;if(info.w==2u)rgb*=vec3((foliage>>16)&255u,(foliage>>8)&255u,foliage&255u)/255.0;uvec3 bytes=uvec3(clamp(rgb,0,1)*255.0);foliage=(bytes.x<<16)|(bytes.y<<8)|bytes.z;}
+        instances.item[segmentBase(segment)+slot]=Instance(vec4(p.x,ph-.3*scale,p.y,scale),uvec4(type|(lod<<8)|(rotation<<16),foliage,trunk,family));
+    }
+}

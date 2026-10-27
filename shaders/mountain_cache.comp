@@ -1,0 +1,19 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_fp64 : require
+#define FTF_CACHE_BUILD
+#include "shared.glsl"
+#include "ftf_terrain.glsl"
+#include "ftf_regions.glsl"
+#include "ftf_mountains.glsl"
+layout(local_size_x=64) in;
+void main(){
+    uint index=gl_GlobalInvocationID.x;if(index>=mountainCache.info.z)return;
+    uint instance=index/mountainCache.info.y,local=index%mountainCache.info.y,octave=local>=mountainCache.info.x?1u:0u;
+    if(octave==1u)local-=mountainCache.info.x;
+    ivec4 bounds=mountainCache.bounds[octave];ivec2 cell=bounds.xy+ivec2(local%uint(bounds.z),local/uint(bounds.z));
+    uint type=mountainType(instance),first=type==0u?3u:type==1u?4u:6u,seed=mountainSeed(instance,first+1u);
+    precise float gridSize=octave==0u?128.0:128.0*.8;
+    precise vec2 point=(vec2(cell)+FTF_CELLS[ftfHash(seed,cell)&255u])*gridSize;
+    mountainCache.heights[index]=mountainBase(point,instance,mountainScale(instance));
+}
