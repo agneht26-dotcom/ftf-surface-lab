@@ -523,6 +523,18 @@ std::vector<float> Surface::heightField(){
     void* mapped{};vkCheck(vkMapMemory(gpu.device,staging.memory,0,staging.size,0,&mapped));std::vector<float> values(count);for(size_t i=0;i<count;++i)values[i]=static_cast<float*>(mapped)[i*4];vkUnmapMemory(gpu.device,staging.memory);gpu.release(staging);return values;
 }
 
+std::vector<std::vector<float>> Surface::heightWindows(const std::vector<glm::ivec4>& windows){
+    std::vector<std::vector<float>> out(windows.size());if(windows.empty()||!field.handle)return out;
+    std::vector<VkBufferImageCopy> copies;VkDeviceSize bytes=0;
+    for(auto& r:windows){if(r.x<0||r.y<0||r.z<=0||r.w<=0||uint32_t(r.x+r.z)>resolution||uint32_t(r.y+r.w)>resolution)throw std::runtime_error("height window outside the field");
+        VkBufferImageCopy c{};c.bufferOffset=bytes;c.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};c.imageOffset={r.x,r.y,0};c.imageExtent={uint32_t(r.z),uint32_t(r.w),1};copies.push_back(c);bytes+=VkDeviceSize(r.z)*r.w*16;}
+    vkCheck(vkDeviceWaitIdle(gpu.device));auto staging=gpu.buffer(bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    gpu.immediate([&](VkCommandBuffer cmd){VkMemoryBarrier b{VK_STRUCTURE_TYPE_MEMORY_BARRIER};b.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT;b.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&b,0,nullptr,0,nullptr);vkCmdCopyImageToBuffer(cmd,field.handle,VK_IMAGE_LAYOUT_GENERAL,staging.handle,uint32_t(copies.size()),copies.data());});
+    void* mapped{};vkCheck(vkMapMemory(gpu.device,staging.memory,0,staging.size,0,&mapped));const float* source=static_cast<const float*>(mapped);
+    for(size_t i=0;i<windows.size();++i){size_t n=size_t(windows[i].z)*windows[i].w,first=size_t(copies[i].bufferOffset/16);out[i].resize(n);for(size_t k=0;k<n;++k)out[i][k]=source[(first+k)*4];}
+    vkUnmapMemory(gpu.device,staging.memory);gpu.release(staging);return out;
+}
+
 void Surface::recordHeightCopy(VkCommandBuffer cmd,uint32_t frame,const TerrainParams& params,uint64_t revision,glm::ivec2 offset,uint32_t side){
     if(asyncHeights.size()!=gpu.swap.ImageCount){for(auto& h:asyncHeights)gpu.release(h.staging);asyncHeights.assign(gpu.swap.ImageCount,AsyncHeights{});}
     if(frame>=asyncHeights.size()||!field.handle)return;auto& slot=asyncHeights[frame];if(side==0||side>resolution){side=resolution;offset={0,0};}

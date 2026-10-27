@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
-enum class ToolIcon {Navigate,Detail,Center,Settings,Spawn,Measure,Biome,LOD,Pin,Fly,Walk,Tree};
+enum class ToolIcon {Navigate,Detail,Center,Settings,Spawn,Measure,Biome,LOD,Pin,Fly,Walk,Tree,Copy};
 inline bool toolIconButton(const char* id,ToolIcon icon,bool selected){
  if(selected)ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(.12f,.48f,.40f,1));bool clicked=ImGui::Button(id,{40,30});if(selected)ImGui::PopStyleColor();
  auto a=ImGui::GetItemRectMin();ImVec2 c{a.x+20,a.y+15};auto* d=ImGui::GetWindowDrawList();auto ink=ImGui::GetColorU32(ImGuiCol_Text);
@@ -18,6 +18,7 @@ inline bool toolIconButton(const char* id,ToolIcon icon,bool selected){
  if(icon==ToolIcon::Pin){d->AddCircle({c.x,c.y-4},6,ink,24,1.7f);line(-5.2f,0,0,10);line(5.2f,0,0,10);d->AddCircleFilled({c.x,c.y-4},2,ink);}
  if(icon==ToolIcon::Fly){d->AddRect({c.x-9,c.y-4},{c.x+3,c.y+6},ink,2,0,1.6f);d->AddTriangle({c.x+3,c.y-1},{c.x+10,c.y-5},{c.x+10,c.y+7},ink,1.6f);d->AddCircle({c.x-3,c.y+1},2.5f,ink,12,1.3f);line(-9,-8,-3,-8);line(-6,-11,-6,-5);}
  if(icon==ToolIcon::Walk){d->AddCircleFilled({c.x,c.y-9},3,ink);line(0,-5,0,2);line(0,-3,-6,0);line(0,-3,6,0);line(0,2,-5,10);line(0,2,5,10);}
+ if(icon==ToolIcon::Copy){d->AddRect({c.x-9,c.y-6},{c.x+3,c.y+9},ink,2,0,1.6f);d->AddRect({c.x-4,c.y-11},{c.x+8,c.y+4},ink,2,0,1.6f);}
  if(icon==ToolIcon::Tree){d->AddTriangle({c.x,c.y-11},{c.x-7,c.y-2},{c.x+7,c.y-2},ink,1.5f);d->AddTriangle({c.x,c.y-5},{c.x-9,c.y+6},{c.x+9,c.y+6},ink,1.5f);d->AddRectFilled({c.x-1.5f,c.y+6},{c.x+1.5f,c.y+11},ink);}
  if(icon==ToolIcon::LOD){for(int i=0;i<3;++i){float r=3.0f+i*3;d->AddRect({c.x-r,c.y-r},{c.x+r,c.y+r},ink,1,0,1.4f);}line(-9,0,9,0);line(0,-9,0,9);}
  if(icon==ToolIcon::Settings){d->AddCircle(c,6,ink,24,1.8f);d->AddCircle(c,2,ink,16,1.4f);for(int i=0;i<8;++i){float t=i*6.2831853f/8;line(std::cos(t)*7,std::sin(t)*7,std::cos(t)*10,std::sin(t)*10);}}

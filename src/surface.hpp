@@ -137,6 +137,8 @@ public:
 
     std::vector<float> pickHeights(uint32_t side=129);
     std::vector<float> heightField(); // whole grid, row-major, raw FTF heights (one copy, waits for the GPU)
+    // Several full-resolution windows of the height field in one copy (waits for the GPU): origin.xy and size.zw per window, row-major results.
+    std::vector<std::vector<float>> heightWindows(const std::vector<glm::ivec4>& windows);
     // Asynchronous variant: record a copy of the height field into this frame's staging buffer; read it back when that
     // frame slot comes round again (its fence has signalled), without ever stalling the queue.
     void recordHeightCopy(VkCommandBuffer cmd,uint32_t frame,const TerrainParams& params,uint64_t revision,glm::ivec2 offset={0,0},uint32_t side=0); // side>0: copy only a side x side window starting at offset
