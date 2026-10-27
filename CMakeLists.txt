@@ -42,7 +42,7 @@ foreach(SHADER terrain.comp terrain.vert terrain.frag filter.comp mountain_cache
             "${CMAKE_SOURCE_DIR}/shaders/ftf_mountains.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_sin.glsl"
             "${CMAKE_SOURCE_DIR}/shaders/ftf_land.glsl"
             "${CMAKE_SOURCE_DIR}/shaders/ftf_world.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_water_steps.glsl"
-            "${CMAKE_SOURCE_DIR}/shaders/ftf_islands.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_climate.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_region_cells.glsl" "${CMAKE_SOURCE_DIR}/shaders/cell_state.glsl" "${CMAKE_SOURCE_DIR}/shaders/materials.glsl" "${CMAKE_SOURCE_DIR}/shaders/material_rules_generated.glsl" "${CMAKE_SOURCE_DIR}/shaders/mod_material_rules_generated.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_filters.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_rivers.glsl"
+            "${CMAKE_SOURCE_DIR}/shaders/ftf_islands.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_climate.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_region_cells.glsl" "${CMAKE_SOURCE_DIR}/shaders/cell_state.glsl" "${CMAKE_SOURCE_DIR}/shaders/materials.glsl" "${CMAKE_SOURCE_DIR}/shaders/material_rules_generated.glsl" "${CMAKE_SOURCE_DIR}/shaders/mod_material_rules_generated.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_filters.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_erosion.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_rivers.glsl"
         VERBATIM)
     list(APPEND SHADER_OUTPUTS "${OUTPUT}")
 endforeach()

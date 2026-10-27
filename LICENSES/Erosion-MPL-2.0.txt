@@ -1,21 +1,21 @@
-FTF Surface Lab: shaders/ftf_filters.glsl
+FTF Surface Lab: shaders/ftf_erosion.glsl
 
-shaders/ftf_filters.glsl is a derived work of FreeTerraForged's Erosion.java (a
-"Modification" in the sense of section 1.10 below): its erosion filter is
-re-implemented in GLSL for the GPU, sampled on a preview height grid, with the
-per-version constants of each FreeTerraForged build and FreeTerraForged's sine
-table. Other parts of the same file (cliff relaxation, hashing helpers) come from
-FreeTerraForged's MIT-licensed code; as part of this file they are covered by the
-MPL-2.0 as well.
+shaders/ftf_erosion.glsl is a derived work of FreeTerraForged's Erosion.java (a
+"Modification" in the sense of section 1.10 below): its erosion filter (easeOut,
+smoothStart, minmod, Phacelle noise, the gully/ridge octave loop, sediment, gate
+and depth limit) is re-implemented in GLSL for the GPU on a preview height grid.
+It holds nothing else. The other FreeTerraForged filters (cliff relaxation, beach
+detection, steepness, terrain ceiling, the noise and sine-table helpers) are in
+other files under FreeTerraForged's MIT licence, not the MPL-2.0.
 
 The original Erosion.java acknowledges Rune Skovbo Johansen (runevision):
 https://gist.github.com/runevision/c867c458f06284ad4c0f8aa3b974bc59
 https://www.shadertoy.com/view/wXcfWn
 Based on Runevision's Phacelle Noise / Fast & Gorgeous Erosion Filter.
 
-Like Erosion.java, shaders/ftf_filters.glsl is distributed under the Mozilla
+Like Erosion.java, shaders/ftf_erosion.glsl is distributed under the Mozilla
 Public License, Version 2.0. Its source code is available in the FTF Surface Lab
-source repository (shaders/ftf_filters.glsl). The rest of FTF Surface Lab is a
+source repository (shaders/ftf_erosion.glsl). The rest of FTF Surface Lab is a
 separate "Larger Work" (section 3.3) and is not covered by this licence.
 
 The original notice of Erosion.java follows.
