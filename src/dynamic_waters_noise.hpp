@@ -1,4 +1,9 @@
 #pragma once
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// Dynamic Waters 13.1.1 preview support module, adapted for C++ in FTF Surface Lab (2026-11);
+// see LICENSES/DynamicWaters-MPL-2.0.txt (notices/DynamicWaters-MPL-2.0.txt in release packages).
+//
 // Bit-exact Minecraft 1.21.1 & FastUtil noise/hash/climate primitives for Dynamic Waters:
 // HashCommon.mix, SimplexNoise (2D & 3D), NormalNoise (minecraft:vegetation + minecraft:offset),
 // Biome.coldEnoughToSnow, and biome tag/blacklist matching.

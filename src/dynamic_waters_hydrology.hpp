@@ -1,4 +1,9 @@
 #pragma once
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// Adapted from Dynamic Waters 13.1.1 (AdamNew, MPL-2.0), ported to C++ for FTF Surface Lab (2026-11);
+// see LICENSES/DynamicWaters-MPL-2.0.txt (notices/DynamicWaters-MPL-2.0.txt in release packages).
+//
 // Dynamic Waters 13.1.1 Complete Column Hydrology, Carving, Flow, Biomes, Freezing, ShoreSkin, Boulders & WaterPlants.
 // Ports HydrologyManager, LakeHollows, MountainRiverBiome, BiomeFreezeMixin, MultiNoiseBiomeSourceMixin,
 // ShoreSkin, RiverbankPalettes, RiverbankPalette, WaterPlants, WaterPlantSets, WaterPlant, Boulders, and BiomeMatch.

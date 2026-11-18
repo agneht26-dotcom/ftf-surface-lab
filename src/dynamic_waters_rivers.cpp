@@ -1,3 +1,10 @@
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Adapted from Dynamic Waters 13.1.1 (AdamNew, MPL-2.0) and its TerraFirmaCraft-derived river graph
+// classes (Copyright (c) TerraFirmaCraft team, EUPL v1.2, modified for Dynamic Waters by AdamNew 2026-07-13,
+// ported to C++ for FTF Surface Lab 2026-11). See LICENSES/DynamicWaters-MPL-2.0.txt,
+// DynamicWaters-EUPL-1.2.txt, and DynamicWaters-THIRD-PARTY-NOTICES.txt.
 #include "dynamic_waters_rivers.hpp"
 #include <algorithm>
 #include <array>

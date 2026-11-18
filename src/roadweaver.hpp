@@ -1,4 +1,7 @@
 #pragma once
+// MIT License - Copyright (c) shiroha233 (RoadWeaver 2.3.1-1.21.1)
+// Surface preview adaptation for FTF Surface Lab (2026-11); see LICENSES/RoadWeaver-MIT.txt
+// (notices/RoadWeaver-MIT.txt in release packages) for the full licence text.
 
 #include "structures.hpp"
 #include "structure_render.hpp"

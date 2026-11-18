@@ -1,4 +1,12 @@
 #pragma once
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Adapted from Dynamic Waters 13.1.1 (AdamNew, MPL-2.0), ported to C++ for FTF Surface Lab (2026-11).
+// Includes mountain region/river scheduling adapted from Dynamic Waters Async Rivers
+// (https://github.com/erutobusiness/dynamicwaters-asyncrivers, Copyright (c) 2026 erutobusiness, MIT License).
+// See LICENSES/DynamicWaters-MPL-2.0.txt and LICENSES/DynamicWaters-THIRD-PARTY-NOTICES.txt.
+//
 // Dynamic Waters 13.1.1 Mountain Watersheds, Basin Routing, Lakes, Channels & Shared Lowland Forms:
 // Exact port of BasinTile, WatershedPath, WatershedLake, ChannelForm, CoarseHeightField cache,
 // and shared gorge / lowland route / river-radius math from HydrologyManager.

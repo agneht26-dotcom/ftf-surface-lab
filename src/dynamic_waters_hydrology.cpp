@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// Adapted from Dynamic Waters 13.1.1 (AdamNew, MPL-2.0), ported to C++ for FTF Surface Lab (2026-11);
+// see LICENSES/DynamicWaters-MPL-2.0.txt (notices/DynamicWaters-MPL-2.0.txt in release packages).
 #include "dynamic_waters_hydrology.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>

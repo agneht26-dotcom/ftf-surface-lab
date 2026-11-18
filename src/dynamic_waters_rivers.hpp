@@ -1,4 +1,15 @@
 #pragma once
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Adapted from Dynamic Waters 13.1.1 (AdamNew, MPL-2.0): MainRivers, RiverShaper, and
+// TerraFirmaCraft-derived river graph classes (RiverContext, RiverFlow, RiverGraphEdge,
+// RiverInstance, RiverMathUtils, RiverNetworkBuilder, RiverPartition, RiverPathFractal, FastConcurrentCache).
+// Original TFC components Copyright (c) TerraFirmaCraft team, EUPL v1.2
+// (https://github.com/TerraFirmaCraft/TerraFirmaCraft); modified for Dynamic Waters by AdamNew (2026-07-13)
+// and ported to C++ for FTF Surface Lab (2026-11). Licensed under MPL-2.0 / compatible EUPL v1.2;
+// see LICENSES/DynamicWaters-MPL-2.0.txt, DynamicWaters-EUPL-1.2.txt, and DynamicWaters-THIRD-PARTY-NOTICES.txt.
+//
 // Dynamic Waters 13.1.1 Lowland River Network Engine:
 // Exact port of MainRivers, RiverNetworkBuilder, RiverShaper, RiverInstance,
 // RiverPathFractal, RiverGraphEdge, RiverPartition, RiverFlow, RiverMathUtils.

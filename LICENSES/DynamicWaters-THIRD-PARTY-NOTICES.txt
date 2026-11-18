@@ -1,17 +1,30 @@
-# Third-party notices
+# Dynamic Waters 13.1.1 — Third-party & File Notices (FTF Surface Lab C++ Port)
 
-Dynamic Waters is licensed under the Mozilla Public License 2.0 (see [LICENSE](LICENSE)). The files below are
-adapted from other projects and keep those projects' licences. Each one also says so in a notice at its top.
+Dynamic Waters (`AdamNew`) is licensed under the **Mozilla Public License 2.0** (`DynamicWaters-MPL-2.0.txt`).
+The C++ preview implementation in FTF Surface Lab adapts algorithms and data from Dynamic Waters 13.1.1
+(`src/dynamic_waters_*.hpp`, `src/dynamic_waters_*.cpp`, and `assets/dynamicwaters/`) while retaining each
+upstream component's licence and attribution. The rest of FTF Surface Lab is a separate "Larger Work" under
+MPL-2.0 Section 3.3.
 
-Paths are relative to `src/main/java/com/AdamNew/dynamicwaters/`.
+## File mapping in FTF Surface Lab
+
+| FTF Surface Lab path | Upstream source & adaptation | Licence |
+|---|---|---|
+| `src/dynamic_waters_config.hpp` | Dynamic Waters `Config` / TOML schema & hash state | MPL-2.0 (`DynamicWaters-MPL-2.0.txt`) |
+| `src/dynamic_waters_noise.hpp` | Dynamic Waters FastUtil / Minecraft 1.21.1 noise helpers | MPL-2.0 (`DynamicWaters-MPL-2.0.txt`) |
+| `src/dynamic_waters_hydrology.hpp`, `.cpp` | Dynamic Waters `HydrologyManager`, `LakeHollows`, `ShoreSkin`, `RiverbankPalettes`, `WaterPlants`, `Boulders` | MPL-2.0 (`DynamicWaters-MPL-2.0.txt`) |
+| `src/dynamic_waters_basin.hpp`, `.cpp` | Dynamic Waters `BasinTile`, `WatershedPath`, `WatershedLake`, `ChannelForm`, plus `dynamicwaters-asyncrivers` scheduling | MPL-2.0 + MIT (see below) |
+| `src/dynamic_waters_rivers.hpp`, `.cpp` | Dynamic Waters `MainRivers`, `RiverShaper`, plus TerraFirmaCraft-derived river graph / flow classes listed below | MPL-2.0 / EUPL v1.2 (see below) |
+| `assets/dynamicwaters/` | Dynamic Waters 13.1.1 riverbank palettes & water plant JSON configs | MPL-2.0 (`DynamicWaters-MPL-2.0.txt`) |
 
 ## TerraFirmaCraft
 
 - Source: https://github.com/TerraFirmaCraft/TerraFirmaCraft
 - Copyright (c) TerraFirmaCraft team
-- Licence: European Union Public Licence v1.2, see [LICENSES/EUPL-1.2.txt](LICENSES/EUPL-1.2.txt)
+- Licence: European Union Public Licence v1.2, see `DynamicWaters-EUPL-1.2.txt`
+- Compatible re-distribution: As a Derivative Work under EUPL v1.2 (Appendix compatible licence list includes MPL-2.0), the adapted river graph, flow, partition, fractal, and cache algorithms in `src/dynamic_waters_rivers.hpp` and `src/dynamic_waters_rivers.cpp` remain available under EUPL v1.2 and MPL-2.0, originally adapted from:
 
-| File | Adapted from |
+| Upstream Dynamic Waters Java file | Adapted from TerraFirmaCraft class |
 |---|---|
 | `FastConcurrentCache.java` | `net.dries007.tfc.world.FastConcurrentCache` |
 | `river/RiverContext.java` | `net.dries007.tfc.world.river.RiverInfo` |
@@ -23,18 +36,13 @@ Paths are relative to `src/main/java/com/AdamNew/dynamicwaters/`.
 | `river/RiverPartition.java` | `net.dries007.tfc.world.region.RegionPartition` |
 | `river/RiverPathFractal.java` | `net.dries007.tfc.world.river.MidpointFractal` |
 
-These files remain available under the EUPL v1.2. `MainRivers.java` uses them but is not adapted from
-TerraFirmaCraft.
+Original notice preserved from upstream Dynamic Waters: modified for Dynamic Waters by AdamNew (2026-07-13); ported to C++ for FTF Surface Lab (2026-11).
 
 ## Dynamic Waters Async Rivers
 
 - Source: https://github.com/erutobusiness/dynamicwaters-asyncrivers
+- Upstream files: `async/MountainRegionStore.java` (`net.erutobusiness.asyncrivers.MountainRegionStore`), `async/MountainRiverScheduler.java` (`net.erutobusiness.asyncrivers.MountainRiverScheduler`), adapted into `src/dynamic_waters_basin.hpp` and `src/dynamic_waters_basin.cpp`
 - Licence: MIT
-
-| File | Adapted from |
-|---|---|
-| `async/MountainRegionStore.java` | `net.erutobusiness.asyncrivers.MountainRegionStore` |
-| `async/MountainRiverScheduler.java` | `net.erutobusiness.asyncrivers.MountainRiverScheduler` |
 
 ```
 MIT License
@@ -60,16 +68,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## Stonecutter mod template
+## Upstream build template & audio note (not shipped in FTF Surface Lab)
 
-- Source: https://github.com/rotgruengelb/stonecutter-mod-template
-- Copyright (c) 2025 murder_spagurder, rotgruengelb and stonecutter-mod-template contributors
-- Licence: MIT, see [build-logic/LICENSE](build-logic/LICENSE)
-
-The build setup comes from this template: `build-logic/`, `build.*.gradle.kts`, `settings.gradle.kts`,
-`stonecutter.gradle.kts` and `gradle/`, at the root of the repository.
-
-## Minecraft
-
-`src/main/resources/assets/dynamicwaters/sounds/river_flow.ogg` is a sound from Minecraft (Mojang Studios). It is
-not covered by the Mozilla Public License.
+Upstream Dynamic Waters also credits `stonecutter-mod-template` (`Copyright (c) 2025 murder_spagurder, rotgruengelb and stonecutter-mod-template contributors`, MIT) for its Gradle build setup and Mojang's `river_flow.ogg` sound asset; neither the Gradle files nor `river_flow.ogg` are included in FTF Surface Lab.
