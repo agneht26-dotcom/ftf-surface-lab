@@ -18,6 +18,10 @@
 #include "world.hpp"
 #include "rivers.hpp"
 #include "biome_census.hpp"
+#include "structures.hpp"
+#include "structure_render.hpp"
+#include "roadweaver.hpp"
+#include "biome_mod_configs.hpp"
 #include "mesh_heights.hpp"
 #include <imgui_impl_glfw.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -47,16 +51,19 @@ struct Options {
     bool exitTest=false,graphicsTest=false,poseTest=false,fovSpecified=false;int exitAction=0;int cullTest=0;float fovTest=60;std::string openProject;bool noFiner=false,noMountainCache=false,library=false,testMaterialIDs=false,distanceLod=false,exerciseSaveAs=false,exercisePanels=false,exercisePanelRestore=false,noAdaptiveDetail=false;uint32_t biomeMods=0;
     int previewMenu=0;bool lodWait=false;
     std::string atmosphere; // test: comma list of water,fog,clouds forced on
-    bool profileSteps=false;int orbitFrom=-1,orbitTo=-1,shortcutTest=0;bool exerciseReset2=false;int windowW=1440,windowH=900; /* test: --window-size for tall UI screenshots */uint32_t directLimit=0,biomeBand=1; // test: --biome-band workgroup rows per biome-pass band in progressive builds (0 = whole grid); directLimit: largest grid regenerated in one submission when the editing preview is off (0 = 1024 interactive, unlimited hidden)
+    bool profileSteps=false;int orbitFrom=-1,orbitTo=-1,shortcutTest=0;bool exerciseReset2=false;int windowW=1440,windowH=900;bool windowSizeSpecified=false; /* test: --window-size for tall UI screenshots */uint32_t directLimit=0,biomeBand=1; // test: --biome-band workgroup rows per biome-pass band in progressive builds (0 = whole grid); directLimit: largest grid regenerated in one submission when the editing preview is off (0 = 1024 interactive, unlimited hidden)
     bool providerOnly=false,exerciseDetail=false,exerciseCenter=false,exerciseDetailOff=false,exerciseZoom=false,ambientOcclusion=false,cloudShadows=false;float shadowTime=-1,aoIntensity=1,shadowIntensity=.34f,shadowSpeed=1;std::string motionStart,testSessionRoot;bool testRestore=false,exerciseDetailZoom=false,exerciseFileMenu=false,exerciseLowOrbit=false,testRestoreAccept=false,previewViewMenu=false,previewLodMenu=false,warmup=false,exerciseLoading=false,windowed=false,animate=false,fullscreenTest=false,exercisePoints=false,exerciseFly=false,exerciseWalk=false,walkAt=false,cameraSet=false,previewTest=false,noEditPreview=false,noSelective=false,exerciseStreaming=false,noDistanceLod=false,exerciseEscape=false,exerciseZoomGradual=false;std::string ftfVersion;int walkHold=32;float walkTurn=.6f,walkDt=1.0f/30.0f;bool walkTrace=false;float walkAtX=0,walkAtZ=0,cameraDistance=1,cameraPitch=.58f,panX=0,panZ=0;int animateUntil=0;float detailRadius=0;std::string detailSamples;
     bool uplift=false,upliftMap=false,extentSpecified=false,sunShadows=false,exerciseHover=false,exerciseReset=false,exerciseSpawn=false,exerciseSpawnHistory=false,exerciseMeasure=false,exercisePan=false,exercisePanVertical=false;int testHighlight=-1,testIsolate=-1;float sunAzimuth=305,sunElevation=53,sunIntensity=1,sunShadowStrength=.65f;
     bool oceanFloor=false,noHeightHighlight=false,generatorSpecified=false;
-    bool noIslands=false,noClimate=false,noWorldFilters=false,noRivers=false;
-    std::string exerciseEdit="/terrain/steppe/weight=0.0";
+    int exerciseStartup=0;
+    bool noIslands=false,noClimate=false,noWorldFilters=false,noRivers=false,noFloat64=false,enableDynamicWaters=false;
+    std::string exerciseEdit="/terrain/steppe/weight=0.0",exportDynamicWatersToml;
     float extent=8192,scale=1100,originX=0,originZ=0;int64_t seed=12345;
 };
 static Options arguments(int argc,char** argv){
     Options o;for(int i=1;i<argc;++i){std::string key=argv[i];if(key=="--primitive"||key=="--plains"||key=="--demo"||key=="--regions"||key=="--mix"||key=="--uplift"||key=="--uplift-map"||key=="--terrain")o.generatorSpecified=true;auto value=[&](){if(i+1>=argc)throw std::runtime_error("Missing argument after "+key);return std::string(argv[++i]);};
+        if(key=="--no-float64"){o.noFloat64=true;continue;}
+        if(key=="--exercise-startup"){o.exerciseStartup=std::stoi(value());continue;}
         if(key=="--exercise-refine-cancel"){o.refineCancelTest=true;continue;}
         if(key=="--exercise-slider"){o.sliderEdit=value();continue;}
         if(key=="--slider-start-frame"){o.sliderStartFrame=std::stoi(value());continue;}
@@ -66,7 +73,7 @@ static Options arguments(int argc,char** argv){
         if(key=="--editing-preview"){o.previewTest=true;continue;}
         if(key=="--no-editing-preview"){o.noEditPreview=true;continue;}
         if(key=="--no-selective-updates"){o.noSelective=true;continue;}
-        if(key=="--atmosphere"){o.atmosphere=value();continue;}if(key=="--profile-steps"){o.profileSteps=true;continue;}if(key=="--biome-band"){o.biomeBand=uint32_t(std::stoul(value()));continue;}if(key=="--window-size"){o.windowW=std::stoi(value());o.windowH=std::stoi(value());continue;}if(key=="--exercise-reset"){o.exerciseReset2=true;continue;}if(key=="--shortcut-test"){o.shortcutTest=std::stoi(value());continue;}if(key=="--orbit-test"){o.orbitFrom=std::stoi(value());o.orbitTo=std::stoi(value());continue;}if(key=="--direct-limit"){o.directLimit=uint32_t(std::stoul(value()));continue;}
+        if(key=="--atmosphere"){o.atmosphere=value();continue;}if(key=="--profile-steps"){o.profileSteps=true;continue;}if(key=="--biome-band"){o.biomeBand=uint32_t(std::stoul(value()));continue;}if(key=="--window-size"){o.windowW=std::stoi(value());o.windowH=std::stoi(value());o.windowSizeSpecified=true;continue;}if(key=="--exercise-reset"){o.exerciseReset2=true;continue;}if(key=="--shortcut-test"){o.shortcutTest=std::stoi(value());continue;}if(key=="--orbit-test"){o.orbitFrom=std::stoi(value());o.orbitTo=std::stoi(value());continue;}if(key=="--direct-limit"){o.directLimit=uint32_t(std::stoul(value()));continue;}
         if(key=="--walk-hold"){o.walkHold=std::stoi(value());continue;}if(key=="--walk-turn"){o.walkTurn=std::stof(value());continue;}if(key=="--walk-trace"){o.walkTrace=true;continue;}if(key=="--walk-dt"){o.walkDt=std::stof(value());continue;}
         if(key=="--count-biomes"){o.countBiomes=std::stoi(value());continue;}if(key=="--pick-check"){o.pickCheck=std::stoi(value());continue;}if(key=="--finer-band"){o.finerBand=std::stoi(value());continue;}if(key=="--exercise-copy"){o.exerciseCopy=true;continue;}if(key=="--no-finer"){o.noFiner=true;continue;}if(key=="--open-project"){o.openProject=value();continue;}if(key=="--exit-action"){o.exitAction=std::stoi(value());o.exitTest=true;}else if(key=="--exercise-exit-prompt")o.exitTest=true;else if(key=="--exercise-graphics-restore")o.graphicsTest=true;else if(key=="--exercise-fly-pose")o.poseTest=true;else if(key=="--culling-test")o.cullTest=std::stoi(value());else if(key=="--fov"){o.fovTest=std::stof(value());o.fovSpecified=true;}else if(key=="--biome-mods")o.biomeMods=std::stoul(value());else if(key=="--exercise-panel-restore"){o.exercisePanels=true;o.exercisePanelRestore=true;}else if(key=="--no-adaptive-detail")o.noAdaptiveDetail=true;else if(key=="--exercise-panels")o.exercisePanels=true;else if(key=="--exercise-save-as")o.exerciseSaveAs=true;else if(key=="--distance-lod")o.distanceLod=true;else if(key=="--highlight-terrain")o.testHighlight=std::stoi(value());else if(key=="--isolate-terrain")o.testIsolate=std::stoi(value());else if(key=="--exercise-spawn")o.exerciseSpawn=true;else if(key=="--exercise-spawn-history"){o.exerciseSpawn=true;o.exerciseSpawnHistory=true;}else if(key=="--exercise-measure")o.exerciseMeasure=true;else if(key=="--exercise-pan")o.exercisePan=true;else if(key=="--exercise-pan-vertical"){o.exercisePan=true;o.exercisePanVertical=true;}else if(key=="--exercise-reset-camera"){o.exerciseCenter=true;o.exerciseReset=true;}else if(key=="--sun-azimuth")o.sunAzimuth=std::stof(value());else if(key=="--sun-elevation")o.sunElevation=std::stof(value());else if(key=="--sun-intensity")o.sunIntensity=std::stof(value());else if(key=="--terrain-shadows")o.sunShadows=true;else if(key=="--sun-shadow-strength")o.sunShadowStrength=std::stof(value());else if(key=="--exercise-hover")o.exerciseHover=true;else if(key=="--preview-view-menu")o.previewViewMenu=true;else if(key=="--preview-lod-menu")o.previewLodMenu=true;else if(key=="--animate")o.animate=true;else if(key=="--animate-until"){o.animate=true;o.animateUntil=std::stoi(value());}else if(key=="--fullscreen-test")o.fullscreenTest=true;else if(key=="--exercise-points")o.exercisePoints=true;else if(key=="--exercise-fly")o.exerciseFly=true;else if(key=="--camera"){o.cameraSet=true;o.cameraDistance=std::stof(value());o.cameraPitch=std::stof(value());}else if(key=="--pan"){o.cameraSet=true;o.panX=std::stof(value());o.panZ=std::stof(value());}else if(key=="--exercise-streaming")o.exerciseStreaming=true;else if(key=="--ftf-version")o.ftfVersion=value();else if(key=="--lod-wait")o.lodWait=true;else if(key=="--preview-menu")o.previewMenu=std::stoi(value());else if(key=="--no-distance-lod")o.noDistanceLod=true;else if(key=="--exercise-escape")o.exerciseEscape=true;else if(key=="--exercise-zoom-gradual")o.exerciseZoomGradual=true;else if(key=="--exercise-walk")o.exerciseWalk=true;else if(key=="--walk-at"){o.walkAt=true;o.walkAtX=std::stof(value());o.walkAtZ=std::stof(value());}else if(key=="--windowed")o.windowed=true;else if(key=="--exercise-loading")o.exerciseLoading=true;else if(key=="--warmup"){o.warmup=true;o.hidden=true;o.frames=1;}else if(key=="--exercise-low-orbit")o.exerciseLowOrbit=true;else if(key=="--test-restore-accept"){o.testRestore=true;o.testRestoreAccept=true;}else if(key=="--test-session-root")o.testSessionRoot=value();else if(key=="--test-restore")o.testRestore=true;else if(key=="--exercise-file-menu")o.exerciseFileMenu=true;else if(key=="--exercise-detail-zoom"){o.exerciseDetail=true;o.exerciseDetailZoom=true;}else if(key=="--ao-intensity")o.aoIntensity=std::stof(value());else if(key=="--shadow-intensity")o.shadowIntensity=std::stof(value());else if(key=="--shadow-speed")o.shadowSpeed=std::stof(value());else if(key=="--motion-start")o.motionStart=value();else if(key=="--exercise-detail-off"){o.exerciseDetail=true;o.exerciseDetailOff=true;}else if(key=="--exercise-zoom")o.exerciseZoom=true;else if(key=="--ambient-occlusion")o.ambientOcclusion=true;else if(key=="--cloud-shadows")o.cloudShadows=true;else if(key=="--shadow-time")o.shadowTime=std::stof(value());else if(key=="--exercise-center")o.exerciseCenter=true;else if(key=="--detail-radius")o.detailRadius=std::stof(value());else if(key=="--detail-samples")o.detailSamples=value();else if(key=="--exercise-detail")o.exerciseDetail=true;else if(key=="--no-height-highlight")o.noHeightHighlight=true;else if(key=="--test-material-ids")o.testMaterialIDs=true;else if(key=="--material-debug"){o.testMaterialIDs=true;o.materialDebug=std::stoi(value());}else if(key=="--test-biome")o.testBiome=std::stoi(value());else if(key=="--library")o.library=true;else if(key=="--frames")o.frames=std::stoi(value());else if(key=="--resolution")o.grid=std::stoul(value());
         else if(key=="--benchmark")o.benchmark=true;else if(key=="--hidden")o.hidden=true;else if(key=="--primitive")o.primitive=true;else if(key=="--plains")o.plains=true;else if(key=="--demo")o.plains=false;
@@ -84,6 +91,8 @@ static Options arguments(int argc,char** argv){
         else if(key=="--no-climate")o.noClimate=true;
         else if(key=="--no-world-filters")o.noWorldFilters=true;
         else if(key=="--no-rivers")o.noRivers=true;
+        else if(key=="--dynamic-waters")o.enableDynamicWaters=true;
+        else if(key=="--export-dynamic-waters-toml")o.exportDynamicWatersToml=value();
         else if(key=="--regions")o.regions=true;
         else if(key=="--mix")o.mix=true;else if(key=="--inputs")o.inputs=value();
         else if(key=="--terrain"){auto name=value();const std::vector<std::string> profiles{"plains","steppe","dales","hills1","hills2","plateau","badlands","torridonian"};auto it=std::find(profiles.begin(),profiles.end(),name);if(it==profiles.end())throw std::runtime_error("Unknown terrain profile: "+name);o.profile=static_cast<uint32_t>(it-profiles.begin());}
@@ -111,6 +120,8 @@ static Options arguments(int argc,char** argv){
     if(o.weightExercise&&o.exerciseEdit.find('=')==std::string::npos)throw std::runtime_error("Use --exercise-edit /preset/path=JSON_VALUE");
     if(o.hidden&&o.frames==0)throw std::runtime_error("Hidden runs need a finite --frames count");return o;
 }
+static std::vector<std::filesystem::path> g_droppedFiles;   // filled by the GLFW drop callback, consumed in the main loop
+static void onFilesDropped(GLFWwindow*,int count,const char** paths){for(int i=0;i<count;++i)g_droppedFiles.push_back(std::filesystem::u8path(paths[i]));}
 static double percentile(std::vector<double> values,double q){if(values.empty())return 0;std::sort(values.begin(),values.end());return values[std::min(values.size()-1,static_cast<size_t>(q*(values.size()-1)))];}
 static uint32_t ftfSeed(uint64_t root){
     if(root<=0x7fffffffull||root>=0xffffffff80000000ull)return static_cast<uint32_t>(root);
@@ -163,11 +174,11 @@ static TerrainParams loadSettings(int64_t& worldSeed){
 // FTF versions the preview can imitate. `profile` selects the filter/terrain behaviour of that build (see buildWorldFilterInputs).
 struct FtfVersion {const char* id;const char* label;const char* note;int profile;};
 static const FtfVersion ftfVersions[]={
-    {"1.0.0014","1.0.0014  (latest unstable, 24 Oct)","Chunk-based world filters: retuned Phacelle erosion (300-block gullies, wider slope gate), terrain ceiling applied before rivers.",1},
-    {"1.0.0013","1.0.0013  (unstable, 23-24 Oct)","Same terrain and erosion as 1.0.0014.",1},
+    {"1.0.0032","1.0.0032  (latest 1.21.1_unstable, default)","Latest 1.21.1_unstable (PlateUpliftBridge PR #246, fixContinentalness PR #357, mountain fades/valley carving PR #360, continuous Perlin macro weirdness, cheese cave offset 0.15, snowCoversSmallPlants, presetName).",5},
+    {"1.0.0013","1.0.0013  (unstable, 23-24 Oct)","Chunk-based world filters: retuned Phacelle erosion (300-block gullies, wider slope gate), terrain ceiling applied before rivers.",1},
     {"1.0.0010","1.0.0010  (unstable, 22 Oct)","Tile filters: Phacelle erosion with 96-block gullies, terrain ceiling only after the filters.",0}
 };
-static constexpr int ftfVersionCount=3;
+static constexpr int ftfVersionCount=int(sizeof(ftfVersions)/sizeof(ftfVersions[0]));
 static int ftfVersionIndexFor(const std::string& id){for(int i=0;i<ftfVersionCount;++i)if(id==ftfVersions[i].id)return i;return 0;}
 static constexpr int animatedSettingCount=12;
 static PresetJson animatedPreset(const PresetJson& original,double phase){
@@ -197,43 +208,113 @@ static void theme(){
 // Crash log: on an unhandled exception, write the call stack (module + offset) to state/crash-log.txt and stderr.
 // Map FTFSurface offsets with build/FTFSurface.map.
 static LONG WINAPI writeCrashLog(EXCEPTION_POINTERS* e){
+    const DWORD code=e&&e->ExceptionRecord?e->ExceptionRecord->ExceptionCode:0;
+    const DWORD64 rip=(e&&e->ContextRecord)?e->ContextRecord->Rip:0;
+    const DWORD64 rsp=(e&&e->ContextRecord)?e->ContextRecord->Rsp:0;
+    char hdr[128];
+    std::snprintf(hdr,sizeof(hdr),"FTF Surface Lab crash, code 0x%08lX (rip=0x%llx rsp=0x%llx)\n",code,(unsigned long long)rip,(unsigned long long)rsp);
+    std::fputs(hdr,stderr);std::fflush(stderr);
+    try{std::filesystem::create_directories("state");std::ofstream("state/crash-log.txt",std::ios::app)<<hdr;}catch(...){}
+    if(code==EXCEPTION_STACK_OVERFLOW||!e||!e->ContextRecord)return EXCEPTION_CONTINUE_SEARCH;
     HANDLE process=GetCurrentProcess(),thread=GetCurrentThread();SymInitialize(process,nullptr,TRUE);
     CONTEXT context=*e->ContextRecord;STACKFRAME64 frame{};frame.AddrPC={context.Rip,0,AddrModeFlat};frame.AddrFrame={context.Rbp,0,AddrModeFlat};frame.AddrStack={context.Rsp,0,AddrModeFlat};
-    std::string text="FTF Surface Lab crash, code 0x"+[&]{char b[16];std::snprintf(b,sizeof(b),"%08lX",e->ExceptionRecord->ExceptionCode);return std::string(b);}()+"\n";
+    std::string text;
     for(int i=0;i<48&&StackWalk64(IMAGE_FILE_MACHINE_AMD64,process,thread,&frame,&context,nullptr,SymFunctionTableAccess64,SymGetModuleBase64,nullptr)&&frame.AddrPC.Offset;++i){
         DWORD64 base=SymGetModuleBase64(process,frame.AddrPC.Offset);char name[MAX_PATH]="?";if(base)GetModuleFileNameA(HMODULE(base),name,MAX_PATH);
         const char* shortName=std::strrchr(name,'\\');char line[400];std::snprintf(line,sizeof(line),"  %s+0x%llx\n",shortName?shortName+1:name,(unsigned long long)(frame.AddrPC.Offset-base));text+=line;}
     std::fputs(text.c_str(),stderr);std::fflush(stderr);
-    try{std::filesystem::create_directories("state");std::ofstream("state/crash-log.txt",std::ios::app)<<text;}catch(...){}
+    try{std::ofstream("state/crash-log.txt",std::ios::app)<<text;}catch(...){}
     return EXCEPTION_CONTINUE_SEARCH;
 }
 int main(int argc,char** argv){
     SetUnhandledExceptionFilter(writeCrashLog);
     try{
         Options options=arguments(argc,argv);
+        const bool interactiveLaunch=!options.hidden&&!options.benchmark&&options.frames==0;
+        const bool startupSetupMode=(options.exerciseStartup>0)||(interactiveLaunch&&options.preset.empty()&&options.openProject.empty()&&!options.noPreset&&!options.primitive&&!options.regions&&!options.profileExercise);
         std::array<wchar_t,32768> executable{};GetModuleFileNameW(nullptr,executable.data(),static_cast<DWORD>(executable.size()));
         auto appRoot=std::filesystem::path(executable.data()).parent_path();PresetEditor editor;int64_t worldSeed=options.seed;
         auto initialPreset=options.preset.empty()?appRoot/"presets"/"Modern - Upscaled Community Preset.json":std::filesystem::path(options.preset);
         if(options.preset.empty()&&!std::filesystem::exists(initialPreset))initialPreset=appRoot/"assets"/"ftf-presets"/"modern-default.json";   // the shareable package ships only FTF's own default presets
-        if(!options.preset.empty()||(!options.noPreset&&!options.primitive&&options.plains&&std::filesystem::exists(initialPreset))){
+        if(!startupSetupMode&&(!options.preset.empty()||(!options.noPreset&&!options.primitive&&options.plains&&std::filesystem::exists(initialPreset)))){
             editor.document.load(initialPreset);if(editor.document.worldSeed&&!options.seedSpecified)worldSeed=*editor.document.worldSeed;
-
         }
-        if(!options.generatorSpecified&&editor.document.loaded())options.uplift=true;
+        if(!options.generatorSpecified&&(editor.document.loaded()||startupSetupMode))options.uplift=true;
         for(auto& edit:options.edits){auto equals=edit.find('=');if(equals==std::string::npos)throw std::runtime_error("Use --set /preset/path=JSON_VALUE");editor.document.set(edit.substr(0,equals),PresetJson::parse(edit.substr(equals+1)));}
-        if((options.mix||options.uplift||options.upliftMap)&&!editor.document.loaded())throw std::runtime_error("Land/surface views require an imported FTF preset");
-        if(options.presetOnly){if(options.exportPreset.empty()&&options.exportDatapack.empty())throw std::runtime_error("--preset-only needs --export-preset or --export-datapack");editor.document.worldSeed=worldSeed;if(!options.exportPreset.empty())editor.document.exportTo(options.exportPreset);if(!options.exportDatapack.empty())editor.document.exportDatapack(options.exportDatapack,appRoot/"assets"/"ftf-datapack-template.zip");std::cout<<"FTF export complete\n";return 0;}
+        if(!startupSetupMode&&(options.mix||options.uplift||options.upliftMap)&&!editor.document.loaded())throw std::runtime_error("Land/surface views require an imported FTF preset");
+        if(options.presetOnly){if(options.exportPreset.empty()&&options.exportDatapack.empty())throw std::runtime_error("--preset-only needs --export-preset or --export-datapack");editor.document.worldSeed=worldSeed;if(!options.exportPreset.empty())editor.document.exportTo(options.exportPreset);if(!options.exportDatapack.empty())editor.document.exportDatapack(options.exportDatapack,appRoot/"assets"/"ftf-datapack-template.zip",options.ftfVersion.empty()?"1.0.0032":ftfVersions[ftfVersionIndexFor(options.ftfVersion)].id);std::cout<<"FTF export complete\n";return 0;}
         glfwSetErrorCallback([](int code,const char* text){std::fprintf(stderr,"GLFW %d: %s\n",code,text);});
         if(!glfwInit())throw std::runtime_error("GLFW initialization failed");if(!glfwVulkanSupported())throw std::runtime_error("Vulkan loader/driver not available");
-        glfwWindowHint(GLFW_CLIENT_API,GLFW_NO_API);glfwWindowHint(GLFW_VISIBLE,options.hidden?GLFW_FALSE:GLFW_TRUE);
-        // Interactive launches start fullscreen (borderless-style: the desktop video mode, no mode switch). F11 toggles; --windowed opts out.
-        const bool interactiveLaunch=!options.hidden&&!options.benchmark&&options.frames==0;GLFWmonitor* fullscreenMonitor=options.fullscreenTest&&!options.windowed?glfwGetPrimaryMonitor():nullptr;const GLFWvidmode* fullscreenMode=fullscreenMonitor?glfwGetVideoMode(fullscreenMonitor):nullptr;
+        glfwWindowHint(GLFW_CLIENT_API,GLFW_NO_API);glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);
+        const bool persistentSession=interactiveLaunch;
+        const auto globalLayoutFile=[&](){
+            if(!options.testSessionRoot.empty())return std::filesystem::path(options.testSessionRoot)/"state/layout.json";
+            if(const wchar_t* appData=_wgetenv(L"APPDATA");appData&&*appData)return std::filesystem::path(appData)/"FTF Surface Lab"/"layout.json";
+            return appRoot/"state/layout.json";
+        }();
+        const auto legacyDockLayoutFile=appRoot/"state/docked-panels.json";
+        int windowedX=80,windowedY=60,windowedW=options.windowW,windowedH=options.windowH;
+        bool restoreMaximized=false,restoreFullscreen=false;int restoredRightTab=-1,activeRightTab=0;
+        int dwPreviewRadius=4096;bool dwPinSet=false;glm::vec2 dwPinPos{0.0f,0.0f};
+        glm::vec2 dwAutoFocusActive{0.0f,0.0f};bool dwAutoFocusValid=false,dwPrevPinSet=false,dwPrevEnabled=false;
+        std::vector<glm::vec3> dwRingCache;glm::vec3 dwCenterCache{};bool dwRingValid=false;glm::vec2 dwRingKeyCenter{};int dwRingKeyRadius=0;uint64_t dwRingKeyRev=0,dwRingKeyPickRev=0;bool dwRingKeyOcean=false;float dwRingKeySea=63.0f;
+        Json loadedGlobalLayout;bool hasLoadedGlobalLayout=false;
+        if(persistentSession){
+            if(std::filesystem::exists(globalLayoutFile))try{std::ifstream f(globalLayoutFile);f>>loadedGlobalLayout;hasLoadedGlobalLayout=loadedGlobalLayout.is_object();}catch(...){}
+            else if(std::filesystem::exists(legacyDockLayoutFile))try{std::ifstream f(legacyDockLayoutFile);Json legacyDock;f>>legacyDock;if(legacyDock.is_object()){loadedGlobalLayout={{"panels",legacyDock}};hasLoadedGlobalLayout=true;}}catch(...){}
+            if(hasLoadedGlobalLayout){
+                if(loadedGlobalLayout.contains("right_tab")&&loadedGlobalLayout["right_tab"].is_number_integer()){
+                    restoredRightTab=std::clamp(loadedGlobalLayout["right_tab"].get<int>(),0,1);
+                    activeRightTab=restoredRightTab;
+                }
+                if(loadedGlobalLayout.contains("dw_preview")&&loadedGlobalLayout["dw_preview"].is_object()){
+                    const auto& dwp=loadedGlobalLayout["dw_preview"];
+                    if(dwp.contains("radius")&&dwp["radius"].is_number_integer())dwPreviewRadius=std::clamp(dwp["radius"].get<int>(),1,131072);
+                    dwPinSet=dwp.value("pinned",false);
+                    if(dwp.contains("x")&&dwp["x"].is_number()&&dwp.contains("z")&&dwp["z"].is_number())
+                        dwPinPos={dwp["x"].get<float>(),dwp["z"].get<float>()};
+                }
+                if(loadedGlobalLayout.contains("window")&&loadedGlobalLayout["window"].is_object()){
+                    const auto& wj=loadedGlobalLayout["window"];
+                    if(!options.windowSizeSpecified){
+                        if(wj.contains("x")&&wj["x"].is_number_integer())windowedX=wj["x"].get<int>();
+                        if(wj.contains("y")&&wj["y"].is_number_integer())windowedY=wj["y"].get<int>();
+                        if(wj.contains("w")&&wj["w"].is_number_integer())windowedW=std::max(640,wj["w"].get<int>());
+                        if(wj.contains("h")&&wj["h"].is_number_integer())windowedH=std::max(420,wj["h"].get<int>());
+                    }
+                    restoreMaximized=wj.value("maximized",false);
+                    restoreFullscreen=wj.value("fullscreen",false);
+                    RECT desired{windowedX,windowedY,windowedX+windowedW,windowedY+windowedH};
+                    MONITORINFO mi{sizeof(mi)};
+                    if(HMONITOR mon=MonitorFromRect(&desired,MONITOR_DEFAULTTONEAREST);mon&&GetMonitorInfoW(mon,&mi)){
+                        int workW=std::max(640,int(mi.rcWork.right-mi.rcWork.left)),workH=std::max(420,int(mi.rcWork.bottom-mi.rcWork.top));
+                        windowedW=std::min(windowedW,workW);windowedH=std::min(windowedH,workH);
+                        windowedX=std::clamp(windowedX,int(mi.rcWork.left),int(mi.rcWork.right)-windowedW);
+                        windowedY=std::clamp(windowedY,int(mi.rcWork.top),int(mi.rcWork.bottom)-windowedH);
+                    }
+                }
+            }
+        }
+        GLFWmonitor* fullscreenMonitor=options.fullscreenTest&&!options.windowed?glfwGetPrimaryMonitor():nullptr;const GLFWvidmode* fullscreenMode=fullscreenMonitor?glfwGetVideoMode(fullscreenMonitor):nullptr;
         if(fullscreenMode){glfwWindowHint(GLFW_RED_BITS,fullscreenMode->redBits);glfwWindowHint(GLFW_GREEN_BITS,fullscreenMode->greenBits);glfwWindowHint(GLFW_BLUE_BITS,fullscreenMode->blueBits);glfwWindowHint(GLFW_REFRESH_RATE,fullscreenMode->refreshRate);}
         glfwWindowHint(GLFW_AUTO_ICONIFY,GLFW_FALSE);glfwWindowHint(GLFW_DECORATED,GLFW_FALSE);
-        GLFWwindow* window=glfwCreateWindow(fullscreenMode?fullscreenMode->width:options.windowW,fullscreenMode?fullscreenMode->height:options.windowH,"FTF Surface Lab",fullscreenMode?fullscreenMonitor:nullptr,nullptr);
-        int windowedX=80,windowedY=60,windowedW=1440,windowedH=900;if(!window)throw std::runtime_error("Window creation failed");
+        GLFWwindow* window=glfwCreateWindow(fullscreenMode?fullscreenMode->width:windowedW,fullscreenMode?fullscreenMode->height:windowedH,"FTF Surface Lab",fullscreenMode?fullscreenMonitor:nullptr,nullptr);
+        if(!window)throw std::runtime_error("Window creation failed");glfwSetDropCallback(window,onFilesDropped);
+        if(!fullscreenMonitor&&!options.hidden)glfwSetWindowPos(window,windowedX,windowedY);
         WindowChrome chrome(window,glfwGetWin32Window(window));
-        Gpu gpu;gpu.initialize(window);stateDirectory=gpu.shaderRoot.parent_path()/"state";IMGUI_CHECKVERSION();ImGui::CreateContext();
+        if(persistentSession&&!fullscreenMonitor&&!options.windowed){
+            if(restoreFullscreen){
+                int monCount=0;GLFWmonitor** mons=glfwGetMonitors(&monCount);GLFWmonitor* best=glfwGetPrimaryMonitor();
+                int cx=windowedX+windowedW/2,cy=windowedY+windowedH/2;
+                for(int miIdx=0;miIdx<monCount;++miIdx){int mx=0,my=0;glfwGetMonitorPos(mons[miIdx],&mx,&my);const auto* vm=glfwGetVideoMode(mons[miIdx]);if(vm&&cx>=mx&&cx<mx+vm->width&&cy>=my&&cy<my+vm->height){best=mons[miIdx];break;}}
+                if(const auto* md=best?glfwGetVideoMode(best):nullptr)glfwSetWindowMonitor(window,best,0,0,md->width,md->height,md->refreshRate);
+            }else if(restoreMaximized){
+                glfwMaximizeWindow(window);
+            }
+            chrome.refresh();
+        }
+        if(!options.hidden)glfwShowWindow(window);
+        Gpu gpu;gpu.initialize(window,!options.noFloat64);stateDirectory=gpu.shaderRoot.parent_path()/"state";IMGUI_CHECKVERSION();ImGui::CreateContext();
         auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;
         if(std::filesystem::exists("C:/Windows/Fonts/segoeui.ttf"))io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/segoeui.ttf",17);
         theme();gpu.initializeGui();Surface surface(gpu);uiSectionsStartCollapsed=interactiveLaunch;surface.profileSteps=options.profileSteps;EditPreview editPreview(surface);editPreview.enabled=(interactiveLaunch||options.previewTest)&&!options.noEditPreview;editPreview.directLimit=options.directLimit?options.directLimit:interactiveLaunch?1024u:(1u<<30);surface.selectiveGeneration=!options.noSelective;surface.useMountainCache=!options.noMountainCache;
@@ -261,40 +342,95 @@ int main(int argc,char** argv){
         // Background finer detail: the full-resolution patch and ring are built progressively in back surfaces and swapped in when complete,
         // so moving the camera or settling a slider never stalls a frame on a whole 2048 x 2048 generation.
         Surface detailBack(gpu),middleBack(gpu);bool backInitialized=false;ftf::RiverNetworks detailRiversBack,middleRiversBack;
-        struct FinerKey {TerrainParams local{},mid{};bool midActive=false;uint64_t base=0;};FinerKey frontKey{},backKey{};GraphSeeds backSeeds{};bool frontFull=false,backJob=false,swapReady=false;double finerJobStart=0;int finerJobFrame=0;Json finerJobs=Json::array();uint64_t backRevision=1ull<<40;
+        struct FinerKey {TerrainParams local{},mid{};bool midActive=false,midReused=false;uint64_t base=0;};FinerKey frontKey{},backKey{};GraphSeeds backSeeds{};bool frontFull=false,backJob=false,swapReady=false;double finerJobStart=0;int finerJobFrame=0;Json finerJobs=Json::array();uint64_t backRevision=1ull<<40;
         auto sameGeometry=[](const FinerKey& a,const FinerKey& b){return a.midActive==b.midActive&&a.local.meta.x==b.local.meta.x&&a.local.domain==b.local.domain&&(!a.midActive||(a.mid.meta.x==b.mid.meta.x&&a.mid.domain==b.mid.domain));};
         auto sameKey=[](const FinerKey& a,const FinerKey& b){return a.midActive==b.midActive&&a.base==b.base&&!std::memcmp(&a.local,&b.local,sizeof(a.local))&&(!a.midActive||!std::memcmp(&a.mid,&b.mid,sizeof(a.mid)));};
         ftf::RiverNetworks riverNetworks;TerrainParams previous=params;GraphSeeds graphSeeds,previousSeeds;uint64_t revision=1;int frameNumber=0;
         float yaw=.7f,pitch=options.cameraSet?options.cameraPitch:.58f,distance=options.cameraSet?options.cameraDistance:1.0f,exaggeration=1.0f,cameraPanY=0;glm::vec2 pan=options.cameraSet?glm::vec2(options.panX,options.panZ):glm::vec2(0);int layer=0,targetHz=12,biomeColors=options.biomeColors;PresetJson biomeLegend;{std::ifstream info(appRoot/"assets"/"biomes-1.21.1.json");info>>biomeLegend;}PresetJson blockLegend;{std::ifstream info(appRoot/"assets"/"materials-1.21.1.json");info>>blockLegend;}char blockSearch[96]{};
+        auto structureSets=mcstruct::loadStructureSets(appRoot/"assets"/"structures-1.21.1.json",biomeLegend);
+        auto structureBiomeTable=loadBiomeTableWords(appRoot/"assets");
+        std::vector<mcstruct::StructurePin> structurePins;std::vector<float> structurePinY;uint64_t structurePinYRev=0;bool showStructures=false,structureLabels=false;int structureDisplayMode=0;
+        uint64_t structureCacheRev=0,structureCacheMask=0;int64_t structureCacheSeed=0;glm::vec3 structureCacheDomain{0};
+        roadweaver::RoadWeaverConfig rwConfig;roadweaver::RoadNetwork rwNetwork;
+        uint64_t rwCacheRev=0,rwCacheHash=0,rwCacheMask=0;int64_t rwCacheSeed=0;glm::vec3 rwCacheDomain{0};glm::vec2 rwCacheFocus{1e30f,1e30f};std::string rwExportStatus;
+        biomemodcfg::RegionsUnexploredConfig ruCfg;std::string biomeCfgStatus;
+        dw::DynamicWatersConfig dwCfg,dwActiveCfg;std::string dwExportStatus;uint64_t previousDwHash=0,dwPendingEditHash=0;int64_t previousDwSeed=0;bool previousDwVanillaGpu=true,previousDwEnabled=false;double dwEditAt=-10.0;
+        if(options.enableDynamicWaters)dwCfg.enabled=true;
+        if(!options.exportDynamicWatersToml.empty()){auto p=std::filesystem::path(options.exportDynamicWatersToml);if(!p.parent_path().empty())std::filesystem::create_directories(p.parent_path());std::ofstream out(p);out<<dwCfg.toToml();dwExportStatus="Exported "+p.filename().string();}
+        dwActiveCfg=dwCfg;
+        previousDwHash=dwCfg.enabled?dwCfg.generationHash():0ull;dwPendingEditHash=previousDwHash;previousDwSeed=worldSeed;previousDwVanillaGpu=dwCfg.usesVanillaGpuRivers();previousDwEnabled=dwCfg.enabled;
         float animateSpeed=2.0f;double animatePhase=0;bool wasAnimating=false;TerrainParams animateBackup{};
         bool topDown=options.regions||options.upliftMap,lighting=true,animate=options.benchmark||options.animate,automatic=false,showMetrics=true,editing=false,showOceanFloor=options.oceanFloor,showHeightLimit=!options.noHeightHighlight;
         struct AtmosphereUi {bool water=false,fog=false,clouds=false;float ripple=1,reflection=1,fogDensity=.25f,fogFalloff=.5f,fogHeight=63,fogOpacity=1,cloudOpacity=1,cloudCoverage=.5f,cloudDensity=1,cloudBase=350,cloudThickness=140,cloudScale=1500,cloudSpeed=6;} atmo; // render-only: realistic water, volumetric fog and clouds (all off by default)
         bool ambientOcclusion=options.ambientOcclusion,cloudShadows=options.cloudShadows;float aoIntensity=std::clamp(options.aoIntensity,0.0f,2.0f),shadowIntensity=std::clamp(options.shadowIntensity,0.0f,1.0f),shadowSpeed=std::clamp(options.shadowSpeed,0.0f,4.0f);float cameraHeight=0;glm::vec3 lastCameraCenter{};
+        bool taaEnabled=false,taaHistoryValid=false;float taaSharpness=0.5f;uint64_t taaFrame=0;glm::mat4 taaPrevVP{1.0f};glm::vec2 taaPrevOrigin{0.0f};
         bool sunDrag=false;   // Ctrl+Shift+RMB drag turns the sun (azimuth only), latched at drag start
         float sunAzimuth=options.sunAzimuth,sunElevation=options.sunElevation,sunIntensity=options.sunIntensity,sunShadowStrength=options.sunShadowStrength,sunShadowSoftness=.35f,sunShadowRange=1500;bool sunShadows=options.sunShadows,openToolSettingsRequested=false;
-        struct Waypoint {std::string name;glm::vec3 p;uint32_t color;};std::vector<Waypoint> points;bool pointTool=false,copyTool=false;float sunBefore=-1;glm::vec2 panBefore{};std::string copiedText;double copiedAt=-10;   /* copyTool [K]: LMB copies "X Y Z" of the clicked spot */int renamingPoint=-1;char pointNameBuffer[64]{};int highlightedPoint=-1;double lastHeightRefresh=-10;bool flyMode=false;float cameraFov=options.fovTest,flyOrbitRadius=1;glm::vec3 flyPos{};float flyYaw=0,flyPitch=0,flySpeed=0;
-        std::vector<uint32_t> previousRiverWords;uint32_t requestedResolution=options.grid;uint32_t biomeModMask=options.biomeMods;int ftfVersionIndex=options.ftfVersion.empty()?0:ftfVersionIndexFor(options.ftfVersion);bool frustumCulling=options.cullTest!=1,distanceCulling=options.cullTest==2,backfaceCulling=options.cullTest==3;float cullDistance=options.cullTest==2?1000.0f:50000.0f;
+        struct Waypoint {std::string name;glm::vec3 p;uint32_t color;};std::vector<Waypoint> points;bool pointTool=false,copyTool=false,dwTool=false;float sunBefore=-1;glm::vec2 panBefore{};std::string copiedText;double copiedAt=-10;   /* copyTool [K]: LMB copies "X Y Z" of the clicked spot */int renamingPoint=-1;char pointNameBuffer[64]{};int highlightedPoint=-1;double lastHeightRefresh=-10;bool flyMode=false;float cameraFov=options.fovTest,flyOrbitRadius=1;glm::vec3 flyPos{};float flyYaw=0,flyPitch=0,flySpeed=0;
+        auto sanitizeBiomeModMask=[&](uint32_t mask){return mask&4u;};   /* shareable edition: vanilla Minecraft + Regions Unexplored (MIT) only */
+        std::vector<uint32_t> previousRiverWords;uint32_t requestedResolution=options.grid;uint32_t biomeModMask=sanitizeBiomeModMask(options.biomeMods);int ftfVersionIndex=options.ftfVersion.empty()?0:ftfVersionIndexFor(options.ftfVersion);bool ftfVersionLocked=!startupSetupMode;bool startupSetupOpen=startupSetupMode&&!editor.document.loaded();int startupStep=(options.exerciseStartup>=2?1:0);int startupSelectedVer=ftfVersionIndex;std::string startupSelectedId;bool startupShowOtherVersions=false;std::string startupError;editor.setActiveFtfVersion(ftfVersions[ftfVersionIndex].id);if(!startupSetupMode&&editor.document.loaded()){editor.refreshVersionWarning();if(editor.versionWarning.mismatch&&interactiveLaunch)editor.versionMismatchPopupPending=true;}bool frustumCulling=options.cullTest!=1,distanceCulling=options.cullTest==2,backfaceCulling=options.cullTest==3;float cullDistance=options.cullTest==2?1000.0f:50000.0f;
         bool walkGrid=true;bool walkMode=false,walkFlying=false,walkMouseCaptured=false,walkOnGround=false,walkInWater=false,walkLookReset=true,detailAuto=false,hasUserDetailBackup=false;glm::vec3 walkPos{};float walkYaw=0,walkPitch=0,walkVelY=0,walkSpeedScale=1,walkFov=70,savedExaggeration=1;int lodBoostSamples=2048;double lastSpaceTap=-10,autoMoveTime=-10;glm::dvec2 walkLastCursor{};
         std::vector<float> walkHeights;uint64_t walkHeightsRevision=0,heightCopyRevision=0;TerrainParams walkPatch{};std::vector<float> baseWalkHeights;TerrainParams baseWalkParams{},baseWalkPending{};uint64_t baseWalkCopies=0,baseWalkFieldRevision=0;glm::vec2 baseWalkCenter{1e30f,1e30f},patchWindowCenter{1e30f,1e30f}; // baseWalk: a 65 x 65 window of the whole-world grid under the player (collision without a finer patch)
         glm::vec2 lastAutoCamera{},userDetailCenterBackup{};float autoRadiusBackup=2048,userDetailRadiusBackup=2048;int autoGridBackup=1024,userDetailGridBackup=1024;size_t pointsRoundTrip[2]{0,0};std::string pointsRoundTripName;glm::vec2 pointsCentered{};
-        std::vector<glm::vec3> measurePoints;double measureHorizontal=0,measureDirect=0,measureSurface=0;glm::vec3 spawnMarker{};bool hasSpawnMarker=false;
+        struct MeasureProfileSample {float dist=0,y=0;glm::vec3 world{};};
+        std::vector<glm::vec3> measurePoints;double measureHorizontal=0,measureDirect=0,measureSurface=0,measureArea=0,measurePerimeter=0,measureHeading=0;
+        int measureMode=0,measureUnit=0,measureDragIndex=-1,measureHoverVertex=-1,measureProfileHover=-1;bool measureFollowTerrain=true,measureShowProfile=true;
+        float measureMinY=0,measureMaxY=0,measureGain=0,measureLoss=0,measureMaxSlopeDeg=0;std::vector<MeasureProfileSample> measureProfile;bool measureHasCursor=false;glm::vec3 measureCursorWorld{};
+        glm::vec3 spawnMarker{};bool hasSpawnMarker=false;
         glm::vec2 previousPresetSpawn=editor.document.spawn();std::string toolHint;
         struct HoverInfo {bool valid=false;glm::vec3 position{};SurfaceInspection sample{};std::string biome,block,terrain;} hover;
         MeshHeightTiles baseTiles,middleTiles,detailTiles;glm::mat4 meshVp{1};glm::vec2 meshViewport{1,1};PresetJson pickCheckReport;   // full-resolution mesh heights (mesh_heights.hpp)
-        std::vector<float> baseHeightCache,detailHeightCache;uint64_t baseHeightRevision=0,detailHeightRevision=0;double lastHoverTime=-1;
+        std::vector<float> baseHeightCache,detailHeightCache;uint64_t baseHeightRevision=0,detailHeightRevision=0,pendingPickRevision=0;double lastHoverTime=-1;
         float terrainHeightLimit=0,terrainSqueezeStart=0;bool showAboveHeight=false;float aboveHeight=200;std::string highestStatus;std::string status;std::vector<TerrainParams> undo,redo;
+        struct ModConfigSnapshot {
+            uint32_t biomeModMask = 0;
+            roadweaver::RoadWeaverConfig rwConfig{};
+            biomemodcfg::RegionsUnexploredConfig ruCfg{};
+            dw::DynamicWatersConfig dwCfg{};
+            bool operator==(const ModConfigSnapshot& o) const {
+                bool eq = biomeModMask == o.biomeModMask
+                    && rwConfig.hash() == o.rwConfig.hash() && rwConfig.displayMode == o.rwConfig.displayMode
+                    && ruCfg.overworldRegionWeight == o.ruCfg.overworldRegionWeight && ruCfg.enableCustomRegions == o.ruCfg.enableCustomRegions
+                    && ruCfg.enableSurfaceRules == o.ruCfg.enableSurfaceRules && ruCfg.toggleVanillaBiomeReplacements == o.ruCfg.toggleVanillaBiomeReplacements
+                    && dwCfg == o.dwCfg;
+                return eq;
+            }
+            bool operator!=(const ModConfigSnapshot& o) const { return !(*this == o); }
+        };
+        enum class UndoKind { Terrain, Preset, ModConfig };
+        std::vector<UndoKind> undoTimeline, redoTimeline;
+        std::vector<ModConfigSnapshot> modUndo, modRedo;
+        bool modEditing = false;
+        auto captureModConfig = [&]() -> ModConfigSnapshot { return {biomeModMask, rwConfig, ruCfg, dwCfg}; };
+        auto applyModConfig = [&](const ModConfigSnapshot& s) {
+            biomeModMask = sanitizeBiomeModMask(s.biomeModMask);
+            rwConfig = s.rwConfig;
+            ruCfg = s.ruCfg;
+            dwCfg = s.dwCfg;
+        };
         Json previewTrace=Json::array();bool refineCancelExercised=false;double sliderOriginal=0;uint32_t renderedThisFrame=0;
         std::vector<double> gpuTimes,genTimes,filterTimes,drawTimes,frameTimes,cacheTimes,worldTimes,oceanTimes,composeTimes;StageTiming lastTiming{},lastDrawTiming{};bool leftCollapsed=false,rightCollapsed=false,viewportCollapsed=false;ImVec2 rightPanelSize{};int previousTool=-1;
         std::map<std::string,std::vector<double>> stallTimes; // CPU stall bookkeeping reported as `stalls`
         auto stallScope=[&](const char* name,auto&& work){auto began=Clock::now();work();stallTimes[name].push_back(std::chrono::duration<double,std::milli>(Clock::now()-began).count());};
         Clock::time_point lastFrame=Clock::now();double elapsed=0,smoothedFrame=16.7;int goodFrames=0,lastQualityChange=-1000;
-        bool observedSpawnUndo=false,shortcutUndoObserved=false,resetObserved=false;bool shortcutHeld[4]{};glm::vec2 initialSpawn=editor.document.spawn();
+        bool observedSpawnUndo=false,shortcutUndoObserved=false,resetObserved=false;bool shortcutHeld[5]{};glm::vec2 initialSpawn=editor.document.spawn();
         uint64_t generatedFrames=0;uint32_t lastSubmitted=0;
-        ProjectSession project(options.testSessionRoot.empty()?appRoot:std::filesystem::path(options.testSessionRoot));const bool persistentSession=!options.hidden&&!options.benchmark&&options.frames==0;
+        ProjectSession project(options.testSessionRoot.empty()?appRoot:std::filesystem::path(options.testSessionRoot));
         if(!persistentSession&&!options.testRestore)project.restorePending=false;
-        DockPanels dock;std::string savedDockLayout;auto dockLayoutFile=appRoot/"state/docked-panels.json";const Json defaultDock=dock.snapshot();
-        if(persistentSession&&std::filesystem::exists(dockLayoutFile))try{std::ifstream f(dockLayoutFile);Json j;f>>j;dock.load(j);}catch(...){}
-        savedDockLayout=dock.snapshot().dump();bool observedPanelHide=false;
+        DockPanels dock;const Json defaultDock=dock.snapshot();
+        if(persistentSession&&hasLoadedGlobalLayout&&loadedGlobalLayout.contains("panels"))try{dock.load(loadedGlobalLayout["panels"]);}catch(...){}
+        auto captureGlobalLayout=[&](){
+            bool isFullscreen=glfwGetWindowMonitor(window)!=nullptr;
+            bool isMaximized=!isFullscreen&&glfwGetWindowAttrib(window,GLFW_MAXIMIZED)!=0;
+            bool iconified=glfwGetWindowAttrib(window,GLFW_ICONIFIED)!=0;
+            if(!iconified&&!isFullscreen&&!isMaximized){
+                int wx=windowedX,wy=windowedY,ww=windowedW,wh=windowedH;
+                glfwGetWindowPos(window,&wx,&wy);glfwGetWindowSize(window,&ww,&wh);
+                if(ww>=320&&wh>=240){windowedX=wx;windowedY=wy;windowedW=ww;windowedH=wh;}
+            }
+            return Json{{"window",{{"x",windowedX},{"y",windowedY},{"w",windowedW},{"h",windowedH},{"maximized",isMaximized},{"fullscreen",isFullscreen}}},{"panels",dock.snapshot()},{"right_tab",activeRightTab},{"dw_preview",{{"radius",dwPreviewRadius},{"pinned",dwPinSet},{"x",dwPinPos.x},{"z",dwPinPos.y}}}};
+        };
+        std::string savedGlobalLayout=persistentSession?captureGlobalLayout().dump():std::string{};bool observedPanelHide=false;
 
         glm::vec2 restoreTestClick{};bool restoreDialogRequested=false;double sessionTick=0;
         Surface biomeSurface(gpu);bool biomeInitialized=false;
@@ -303,17 +439,17 @@ int main(int argc,char** argv){
         const auto biomeTableWords=loadBiomeTableWords(appRoot/"assets");bool censusRequested=false,censusWaiting=false;int censusGrid=1024;TerrainParams censusParams{};
         std::string censusFingerprint,censusStatus;std::vector<bool> censusPossible;std::optional<BiomeCensus> census;
         bool distanceLod=!options.noDistanceLod;bool lodAdaptive=true,lodWaitForStop=!options.hidden||options.lodWait;double lodResumeAt=0;float lastCameraSignature[14]{};float lodFinest=1.0f,lodCoarsest=64.0f,lodAdaptiveSpacing=0;int lodAdaptiveState=0;float lodBandFraction=.12f;int lodBandCount=6;float lodBandWidth[8]={.12f,.12f,.12f,.12f,.12f,.12f,.12f,.12f};int lodBandDetail[8]={0,1,2,3,4,5,5,5};float finerPatchRadius=0,finerRingScale=2;bool finerLiveFull=false;int finerEditGrid=512,finerDragMode=0; /* while values change: full finer detail (may lag) or a preview patch of finerEditGrid samples */ /* band widths are fractions of the world size; finerPatchRadius 0 = automatic */double detailLastEdit=0;bool finerInCameraModes=true,walkPickTool=false;int fpsLimit=60; /* Settings: viewport FPS lock (0 = off); spare frame time goes to terrain building */double cameraMovedAt=-10;float finerProgress=-1;const char* finerLabel=""; // finerProgress<0: no finer-detail bar
-        auto graphicsState=[&](){return PresetJson{{"editing_preview",{{"enabled",editPreview.enabled},{"cap",editPreview.cap},{"budget_ms",editPreview.budgetMs}}},{"fps_limit",fpsLimit},{"atmosphere",{{"water",atmo.water},{"fog",atmo.fog},{"clouds",atmo.clouds},{"ripple",atmo.ripple},{"reflection",atmo.reflection},{"fog_density",atmo.fogDensity},{"fog_falloff",atmo.fogFalloff},{"fog_height",atmo.fogHeight},{"fog_opacity",atmo.fogOpacity},{"cloud_opacity",atmo.cloudOpacity},{"cloud_coverage",atmo.cloudCoverage},{"cloud_density",atmo.cloudDensity},{"cloud_base",atmo.cloudBase},{"cloud_thickness",atmo.cloudThickness},{"cloud_scale",atmo.cloudScale},{"cloud_speed",atmo.cloudSpeed}}},{"lighting",lighting},{"ao",ambientOcclusion},{"ao_strength",aoIntensity},{"clouds",cloudShadows},{"cloud_strength",shadowIntensity},{"cloud_speed",shadowSpeed},{"sun",{sunAzimuth,sunElevation,sunIntensity,sunShadowStrength,sunShadowSoftness,sunShadowRange}},{"sun_shadows",sunShadows},{"fov",cameraFov},{"frustum_culling",frustumCulling},{"distance_culling",distanceCulling},{"cull_distance",cullDistance},{"backface_culling",backfaceCulling},{"walk_fov",walkFov}};};
+        auto graphicsState=[&](){return PresetJson{{"editing_preview",{{"enabled",editPreview.enabled},{"cap",editPreview.cap},{"budget_ms",editPreview.budgetMs}}},{"fps_limit",fpsLimit},{"taa",taaEnabled},{"taa_sharpness",taaSharpness},{"atmosphere",{{"water",atmo.water},{"fog",atmo.fog},{"clouds",atmo.clouds},{"ripple",atmo.ripple},{"reflection",atmo.reflection},{"fog_density",atmo.fogDensity},{"fog_falloff",atmo.fogFalloff},{"fog_height",atmo.fogHeight},{"fog_opacity",atmo.fogOpacity},{"cloud_opacity",atmo.cloudOpacity},{"cloud_coverage",atmo.cloudCoverage},{"cloud_density",atmo.cloudDensity},{"cloud_base",atmo.cloudBase},{"cloud_thickness",atmo.cloudThickness},{"cloud_scale",atmo.cloudScale},{"cloud_speed",atmo.cloudSpeed}}},{"lighting",lighting},{"ao",ambientOcclusion},{"ao_strength",aoIntensity},{"clouds",cloudShadows},{"cloud_strength",shadowIntensity},{"cloud_speed",shadowSpeed},{"sun",{sunAzimuth,sunElevation,sunIntensity,sunShadowStrength,sunShadowSoftness,sunShadowRange}},{"sun_shadows",sunShadows},{"fov",cameraFov},{"frustum_culling",frustumCulling},{"distance_culling",distanceCulling},{"cull_distance",cullDistance},{"backface_culling",backfaceCulling},{"walk_fov",walkFov}};};
         bool graphicsPersistent=persistentSession||(options.graphicsTest&&!options.testSessionRoot.empty());auto graphicsFile=(options.graphicsTest&&!options.testSessionRoot.empty()?project.root:appRoot)/"state/graphics.json";
         bool migrateLegacyGraphics=persistentSession&&!std::filesystem::exists(graphicsFile);
         auto applyGraphics=[&](const auto& g){if(g.contains("editing_preview")){auto a=g["editing_preview"];editPreview.enabled=a.value("enabled",true)&&!options.noEditPreview;{uint32_t savedCap=a.value("cap",256u);editPreview.cap=savedCap>=1024?1024:savedCap>=512?512:256;}editPreview.budgetMs=std::clamp(a.value("budget_ms",8.0f),2.0f,16.0f);}if(g.contains("atmosphere")){auto a=g["atmosphere"];atmo.water=a.value("water",false);atmo.fog=a.value("fog",false);atmo.clouds=a.value("clouds",false);atmo.ripple=std::clamp(a.value("ripple",1.0f),0.0f,2.0f);atmo.reflection=std::clamp(a.value("reflection",1.0f),0.0f,1.5f);atmo.fogDensity=std::clamp(a.value("fog_density",.25f),0.0f,4.0f);atmo.fogFalloff=std::clamp(a.value("fog_falloff",.5f),0.0f,4.0f);atmo.fogHeight=std::clamp(a.value("fog_height",63.0f),-100.0f,2000.0f);atmo.fogOpacity=std::clamp(a.value("fog_opacity",1.0f),0.0f,1.0f);atmo.cloudOpacity=std::clamp(a.value("cloud_opacity",1.0f),0.0f,1.0f);atmo.cloudCoverage=std::clamp(a.value("cloud_coverage",.5f),0.0f,1.0f);atmo.cloudDensity=std::clamp(a.value("cloud_density",1.0f),0.0f,3.0f);atmo.cloudBase=std::clamp(a.value("cloud_base",350.0f),0.0f,5000.0f);atmo.cloudThickness=std::clamp(a.value("cloud_thickness",140.0f),20.0f,1500.0f);atmo.cloudScale=std::clamp(a.value("cloud_scale",1500.0f),200.0f,10000.0f);atmo.cloudSpeed=std::clamp(a.value("cloud_speed",6.0f),0.0f,200.0f);}
-                lighting=g.value("lighting",true);ambientOcclusion=g.value("ao",false);aoIntensity=g.value("ao_strength",1.0f);cloudShadows=g.value("clouds",false);shadowIntensity=g.value("cloud_strength",.34f);shadowSpeed=g.value("cloud_speed",1.0f);sunShadows=g.value("sun_shadows",false);cameraFov=std::clamp(g.value("fov",60.0f),5.0f,150.0f);if(g.contains("sun")&&g["sun"].size()==6){auto a=g["sun"];sunAzimuth=a[0];sunElevation=a[1];sunIntensity=a[2];sunShadowStrength=a[3];sunShadowSoftness=a[4];sunShadowRange=a[5];}frustumCulling=g.value("frustum_culling",true);distanceCulling=g.value("distance_culling",false);cullDistance=g.value("cull_distance",50000.0f);backfaceCulling=g.value("backface_culling",false);walkFov=g.value("walk_fov",70.0f);
+                lighting=g.value("lighting",true);taaEnabled=g.value("taa",false);taaSharpness=std::clamp(g.value("taa_sharpness",0.5f),0.0f,1.0f);ambientOcclusion=g.value("ao",false);aoIntensity=g.value("ao_strength",1.0f);cloudShadows=g.value("clouds",false);shadowIntensity=g.value("cloud_strength",.34f);shadowSpeed=g.value("cloud_speed",1.0f);sunShadows=g.value("sun_shadows",false);cameraFov=std::clamp(g.value("fov",60.0f),5.0f,150.0f);if(g.contains("sun")&&g["sun"].size()==6){auto a=g["sun"];sunAzimuth=a[0];sunElevation=a[1];sunIntensity=a[2];sunShadowStrength=a[3];sunShadowSoftness=a[4];sunShadowRange=a[5];}frustumCulling=g.value("frustum_culling",true);distanceCulling=g.value("distance_culling",false);cullDistance=g.value("cull_distance",50000.0f);backfaceCulling=g.value("backface_culling",false);walkFov=g.value("walk_fov",70.0f);
             fpsLimit=g.value("fps_limit",60);if(fpsLimit!=0)fpsLimit=std::clamp(fpsLimit,20,240);};
         const auto defaultGraphics=graphicsState();   // Settings > Reset
         if(graphicsPersistent&&std::filesystem::exists(graphicsFile))try{applyGraphics(ProjectSession::read(graphicsFile));}catch(const std::exception& e){editor.status=e.what();}
         if(options.atmosphere.find("water")!=std::string::npos)atmo.water=true;if(options.atmosphere.find("fog")!=std::string::npos)atmo.fog=true;if(options.atmosphere.find("clouds")!=std::string::npos)atmo.clouds=true;
         if(options.fovSpecified)cameraFov=options.fovTest;auto initialGraphics=graphicsState();std::string savedGraphics=graphicsState().dump();
-        bool closeRequested=false,closeAfterSave=false,resetSettingsRequested=false;ImVec2 settingsPos{};uint64_t saveSerial=0,closeSaveSerial=0;ImVec2 exitCancelPoint{};bool exitPromptObserved=false,exitCancelObserved=false,graphicsRestoreObserved=false;float poseError=0,poseDirectionError=0;
+        bool closeRequested=false,closeAfterSave=false,newProjectRequested=false,newAfterSave=false,resetSettingsRequested=false;ImVec2 settingsPos{};uint64_t saveSerial=0,closeSaveSerial=0,newSaveSerial=0;ImVec2 exitCancelPoint{};bool exitPromptObserved=false,exitCancelObserved=false,graphicsRestoreObserved=false;float poseError=0,poseDirectionError=0;
         glfwSetWindowUserPointer(window,&closeRequested);glfwSetWindowCloseCallback(window,[](GLFWwindow* w){*static_cast<bool*>(glfwGetWindowUserPointer(w))=true;glfwSetWindowShouldClose(w,GLFW_FALSE);});
         auto captureView=[&](){
             auto vec=[](const auto& v){return PresetJson::array({v[0],v[1],v[2],v[3]});};
@@ -321,6 +457,9 @@ int main(int argc,char** argv){
                 {"camera",{yaw,pitch,distance,exaggeration,pan.x,pan.y,cameraHeight}},{"camera_pan_y",cameraPanY},{"camera_centered",cameraCentered},{"top_down",topDown},{"lighting",lighting},{"layer",layer},{"biome_colors",biomeColors},{"automatic_resolution",automatic},{"distance_lod",distanceLod},{"lod_band_fraction",lodBandFraction},{"lod_bands",[&]{auto a=Json::array();for(int i=0;i<lodBandCount;++i)a.push_back({{"width",lodBandWidth[i]},{"detail",lodBandDetail[i]}});return a;}()},{"finer_patch_radius",finerPatchRadius},{"finer_live_full",finerLiveFull},{"finer_drag_mode",finerDragMode},{"finer_edit_grid",finerEditGrid},{"finer_ring_scale",finerRingScale},{"lod_boost_samples",lodBoostSamples},{"lod_adaptive",lodAdaptive},{"lod_wait_stop",lodWaitForStop},{"finer_in_camera_modes",finerInCameraModes},{"lod_finest",lodFinest},{"lod_coarsest",lodCoarsest},{"ftf_version",ftfVersions[ftfVersionIndex].id},{"biome_mods",biomeModMask},{"ocean_floor",showOceanFloor},{"height_highlight",showHeightLimit},
                 {"ambient_occlusion",ambientOcclusion},{"cloud_shadows",cloudShadows},{"ao_intensity",aoIntensity},{"shadow_intensity",shadowIntensity},{"shadow_speed",shadowSpeed},
                 {"sun",{sunAzimuth,sunElevation,sunIntensity,sunShadowStrength,sunShadowSoftness,sunShadowRange}},{"sun_shadows",sunShadows},{"detail_placed",detailPlaced},{"detail_center",{detailCenter.x,detailCenter.y}},{"detail_screen_radius",detailScreenRadius},{"detail_world_radius",detailRadius},{"detail_radius_units","blocks"},{"detail_surface_height",detailSurfaceHeight},{"detail_resolution",detailGrid},{"adaptive_detail_mesh",adaptiveDetailMesh},
+                {"dynamic_waters",PresetJson::parse(dwCfg.toJson().dump())},
+                {"road_weaver",PresetJson::parse(rwConfig.toStateJson().dump())},
+                {"structures_view",{{"show",showStructures},{"labels",structureLabels},{"display_mode",structureDisplayMode}}},
                 {"points",[&]{auto list=PresetJson::array();for(auto& w:points)list.push_back({{"name",w.name},{"x",w.p.x},{"y",w.p.y},{"z",w.p.z},{"color",w.color}});return list;}()}};
         };
         auto restoreView=[&](const PresetJson& view,bool keepHistory=false){
@@ -330,19 +469,31 @@ int main(int argc,char** argv){
             unpack("meta",params.meta);unpack("domain",params.domain);unpack("land",params.land);unpack("detail",params.detail);unpack("climate",params.climate);unpack("ftf_scales",params.ftfScales);
             if(params.meta.x<64||params.meta.x>8192||(params.meta.x&(params.meta.x-1)))params.meta.x=2048;if(params.meta.z>6)params.meta.z=5;
             if(view.contains("camera")&&view["camera"].size()==7){auto c=view["camera"];yaw=c[0];pitch=std::clamp(c[1].get<float>(),-1.565f,1.565f);distance=std::clamp(c[2].get<float>(),1e-12f,4.0f);exaggeration=c[3];pan={c[4].get<float>(),c[5].get<float>()};cameraHeight=c[6];}
-            biomeModMask=view.value("biome_mods",0u)&7u;
+            biomeModMask=sanitizeBiomeModMask(view.value("biome_mods",0u));
             previousPresetSpawn=editor.document.spawn();
             cameraPanY=view.value("camera_pan_y",0.0f);
             cameraCentered=view.value("camera_centered",false);topDown=view.value("top_down",false);layer=view.value("layer",0);biomeColors=view.value("biome_colors",3);automatic=view.value("automatic_resolution",false);showOceanFloor=view.value("ocean_floor",false);showHeightLimit=view.value("height_highlight",true);
             distanceLod=view.contains("lod_adaptive")?view.value("distance_lod",true):true; // projects saved before adaptive resolution existed had the view off by default
             lodAdaptive=view.value("lod_adaptive",true);lodWaitForStop=view.value("lod_wait_stop",true);finerInCameraModes=view.value("finer_in_camera_modes",true);lodFinest=std::clamp(view.value("lod_finest",1.0f),.25f,64.0f);lodCoarsest=std::clamp(view.value("lod_coarsest",64.0f),lodFinest,512.0f);
-            if(view.contains("ftf_version")&&view["ftf_version"].is_string())ftfVersionIndex=ftfVersionIndexFor(view["ftf_version"].get<std::string>());
+            if(view.contains("ftf_version")&&view["ftf_version"].is_string()){
+                std::string projVer=view["ftf_version"].get<std::string>();
+                if(!ftfVersionLocked){ftfVersionIndex=ftfVersionIndexFor(projVer);ftfVersionLocked=true;editor.setActiveFtfVersion(ftfVersions[ftfVersionIndex].id);}
+                else if(!projVer.empty()){editor.document.sourceFtfVersion=projVer;editor.refreshVersionWarning();if(editor.versionWarning.mismatch&&interactiveLaunch)editor.versionMismatchPopupPending=true;}
+            }
             lodBoostSamples=std::clamp(view.value("lod_boost_samples",2048),1024,4096);
             if(view.contains("lod_bands")&&view["lod_bands"].is_array()&&!view["lod_bands"].empty()){lodBandCount=std::min<int>(8,int(view["lod_bands"].size()));for(int i=0;i<lodBandCount;++i){lodBandWidth[i]=std::clamp(view["lod_bands"][i].value("width",.12f),.002f,1.0f);lodBandDetail[i]=std::clamp(view["lod_bands"][i].value("detail",std::min(i,5)),0,5);}}
             finerPatchRadius=std::max(0.0f,view.value("finer_patch_radius",0.0f));finerLiveFull=view.value("finer_live_full",false);finerDragMode=std::clamp(view.value("finer_drag_mode",finerLiveFull?2:0),0,2);finerEditGrid=std::clamp(view.value("finer_edit_grid",512),256,2048);finerRingScale=std::clamp(view.value("finer_ring_scale",2.0f),1.25f,4.0f);lodBandFraction=view.value("lod_band_fraction",.12f);if(!std::isfinite(lodBandFraction)||lodBandFraction<=0)lodBandFraction=.12f;
             adaptiveDetailMesh=view.value("adaptive_detail_mesh",true);
             detailPlaced=view.value("detail_placed",false);screenDetail=false;detailRadius=view.value("detail_world_radius",2048.0f);if(!std::isfinite(detailRadius)||detailRadius<16||detailRadius>100000)detailRadius=2048;detailRenderRadius=detailRadius;detailSurfaceHeight=view.value("detail_surface_height",0.0f);detailScreenRadius=view.value("detail_screen_radius",120.0f);if(!std::isfinite(detailScreenRadius)||detailScreenRadius<20||detailScreenRadius>600)detailScreenRadius=120;detailGrid=view.value("detail_resolution",1024);if(detailGrid!=256&&detailGrid!=512&&detailGrid!=1024&&detailGrid!=2048)detailGrid=1024;
-            if(view.contains("detail_center")&&view["detail_center"].size()==2)detailCenter={view["detail_center"][0].get<float>(),view["detail_center"][1].get<float>()};detailTool=centerTool=spawnTool=measureTool=pointTool=false;measurePoints.clear();measureHorizontal=measureDirect=measureSurface=0;hasSpawnMarker=false;++revision;if(!keepHistory)editor.clearHistory();
+            if(view.contains("detail_center")&&view["detail_center"].size()==2)detailCenter={view["detail_center"][0].get<float>(),view["detail_center"][1].get<float>()};
+            if(view.contains("dynamic_waters")&&view["dynamic_waters"].is_object())dwCfg=dw::DynamicWatersConfig::fromJson(Json::parse(view["dynamic_waters"].dump()));
+            else dwCfg=dw::DynamicWatersConfig{};
+            if(view.contains("road_weaver")&&view["road_weaver"].is_object())rwConfig=roadweaver::RoadWeaverConfig::fromStateJson(Json::parse(view["road_weaver"].dump()));
+            else rwConfig=roadweaver::RoadWeaverConfig{};
+            if(view.contains("structures_view")&&view["structures_view"].is_object()){const auto& sv=view["structures_view"];showStructures=sv.value("show",false);structureLabels=sv.value("labels",false);structureDisplayMode=std::clamp(sv.value("display_mode",0),0,2);}
+            else{showStructures=false;structureLabels=false;structureDisplayMode=0;}
+            structureCacheRev=0;rwCacheRev=0;
+            detailTool=centerTool=spawnTool=measureTool=pointTool=copyTool=dwTool=false;measurePoints.clear();measureProfile.clear();measureHorizontal=measureDirect=measureSurface=measureArea=measurePerimeter=measureHeading=0;measureMinY=measureMaxY=measureGain=measureLoss=measureMaxSlopeDeg=0;measureDragIndex=-1;measureHoverVertex=-1;measureProfileHover=-1;hasSpawnMarker=false;++revision;if(!keepHistory)editor.clearHistory();
             points.clear();renamingPoint=-1;if(view.contains("points")&&view["points"].is_array())for(auto& item:view["points"])try{glm::vec3 position{item.at("x").get<float>(),item.value("y",0.0f),item.at("z").get<float>()};if(std::isfinite(position.x)&&std::isfinite(position.y)&&std::isfinite(position.z))points.push_back({item.value("name",std::string("Point")).substr(0,60),position,item.value("color",0xffd24au)});}catch(...){}
         };
         // Height of the terrain mesh as drawn at world x,z: the base field, the intermediate ring and the finer patch, each at
@@ -370,8 +521,12 @@ int main(int argc,char** argv){
                 for(size_t i=0;i<band[0].size();++i)if(band[0][i]>best){best=band[0][i];index=size_t(y)*G+i;any=true;}}
             if(!any)return std::nullopt;return std::make_pair(index,best);};
         auto sampleGround=[&](glm::vec2 world,float& out){
-            if(surface.fieldRevision&&(baseHeightCache.empty()||(baseHeightRevision!=surface.fieldRevision&&elapsed-lastHeightRefresh>.4))){stallScope("pick heights (sync readback)",[&]{baseHeightCache=surface.pickHeights();});baseHeightRevision=surface.fieldRevision;lastHeightRefresh=elapsed;}
+            if(baseHeightCache.empty())return false;
             auto h=meshHeight(world,false);if(!h)return false;out=*h;return true;};
+        auto sampleRawGround=[&](glm::vec2 world,float& out){
+            if(baseHeightCache.empty()||!surface.fieldRevision||params.meta.z==3||params.meta.z==6)return false;
+            baseTiles.track(surface,elapsed,false);
+            auto h=baseTiles.height(world,-1e30f);if(!h)return false;out=*h;return true;};
         auto orbitCenter=[&](){glm::vec3 c{pan.x,params.land.z+params.land.x*.13f,pan.y};if(cameraCentered)c.y=cameraHeight*exaggeration;if(params.meta.z==3||params.meta.z==6)c.y=params.land.z;c.y+=cameraPanY;return c;};
         auto flyDirection=[&](){return glm::vec3(std::sin(flyYaw)*std::cos(flyPitch),std::sin(flyPitch),std::cos(flyYaw)*std::cos(flyPitch));};
         // Fly camera (Unreal-style): enters from the current orbit pose and hands a matching orbit pose back when it ends.
@@ -398,31 +553,140 @@ int main(int argc,char** argv){
         auto centerOnPoint=[&](const Waypoint& w){glm::vec2 local{w.p.x-params.domain.y,w.p.z-params.domain.z};
             if(std::abs(local.x)>params.domain.x*.45f||std::abs(local.y)>params.domain.x*.45f){params.domain.y=w.p.x;params.domain.z=w.p.z;local={0,0};}
             pan=local;cameraHeight=w.p.y;{float ground=0;if(sampleGround({w.p.x,w.p.z},ground))cameraHeight=ground;}cameraCentered=true;cameraPanY=0;};
-        auto presetLoaded=[&](){auto spawn=editor.document.spawn();previousPresetSpawn=spawn;params.domain.y=spawn.x;params.domain.z=spawn.y;if(editor.document.previewExtent)params.domain.x=*editor.document.previewExtent;resetCamera();detailPlaced=false;measurePoints.clear();measureHorizontal=measureDirect=measureSurface=0;hasSpawnMarker=false;detailTool=centerTool=spawnTool=measureTool=pointTool=copyTool=false;points.clear();renamingPoint=-1;++revision;};
+        auto presetLoaded=[&](){auto spawn=editor.document.spawn();previousPresetSpawn=spawn;params.domain.y=spawn.x;params.domain.z=spawn.y;if(editor.document.previewExtent)params.domain.x=*editor.document.previewExtent;resetCamera();detailPlaced=false;dwCfg.enabled=false;dwTool=false;measurePoints.clear();measureProfile.clear();measureHorizontal=measureDirect=measureSurface=measureArea=measurePerimeter=measureHeading=0;measureMinY=measureMaxY=measureGain=measureLoss=measureMaxSlopeDeg=0;measureDragIndex=-1;measureHoverVertex=-1;measureProfileHover=-1;hasSpawnMarker=false;detailTool=centerTool=spawnTool=measureTool=pointTool=copyTool=false;points.clear();renamingPoint=-1;undoTimeline.clear();redoTimeline.clear();modUndo.clear();modRedo.clear();modEditing=false;editor.refreshVersionWarning();if(editor.versionWarning.mismatch&&interactiveLaunch)editor.versionMismatchPopupPending=true;++revision;};
         auto undoPreset=[&](bool redo){bool changed=redo?editor.redo():editor.undo();if(changed){previousPresetSpawn=editor.document.spawn();hasSpawnMarker=false;
             if(editor.lastEditedPath.starts_with("/world/properties/spawn")&&!baseHeightCache.empty()){auto uv=(previousPresetSpawn-glm::vec2(params.domain.y,params.domain.z))/params.domain.x+.5f;if(uv.x>=0&&uv.x<=1&&uv.y>=0&&uv.y<=1){int x=int(std::round(uv.x*128)),z=int(std::round(uv.y*128));float h=baseHeightCache[z*129+x];if(!showOceanFloor)h=std::max(h,params.land.z);spawnMarker={previousPresetSpawn.x,h,previousPresetSpawn.y};hasSpawnMarker=true;}}
         }};
-        auto updateMeasurement=[&](){measureHorizontal=measureDirect=measureSurface=0;for(size_t i=1;i<measurePoints.size();++i){auto a=measurePoints[i-1],b=measurePoints[i];measureHorizontal+=glm::length(glm::vec2(b.x-a.x,b.z-a.z));measureDirect+=glm::length(b-a);auto last=a;for(int j=1;j<=64;++j){auto point=glm::mix(a,b,float(j)/64);if(j<64&&!baseHeightCache.empty()){auto uv=(glm::vec2(point.x,point.z)-glm::vec2(params.domain.y,params.domain.z))/params.domain.x+.5f;auto q=glm::clamp(uv,glm::vec2(0),glm::vec2(1))*128.0f;int x=std::min(127,int(q.x)),z=std::min(127,int(q.y));float u=q.x-x,v=q.y-z;point.y=std::lerp(std::lerp(baseHeightCache[z*129+x],baseHeightCache[z*129+x+1],u),std::lerp(baseHeightCache[(z+1)*129+x],baseHeightCache[(z+1)*129+x+1],u),v);if(!showOceanFloor)point.y=std::max(point.y,params.land.z);}measureSurface+=glm::length(point-last);last=point;}}};
+        bool didUndoThisFrame=false;
+        auto performUndo=[&](bool again){
+            didUndoThisFrame=true;
+            auto& tl=again?redoTimeline:undoTimeline;
+            auto& oppTl=again?undoTimeline:redoTimeline;
+            if(!tl.empty()){
+                UndoKind kind=tl.back();tl.pop_back();
+                if(kind==UndoKind::ModConfig){
+                    auto& from=again?modRedo:modUndo;
+                    auto& to=again?modUndo:modRedo;
+                    if(!from.empty()){
+                        to.push_back(captureModConfig());
+                        applyModConfig(from.back());
+                        from.pop_back();
+                        oppTl.push_back(UndoKind::ModConfig);
+                    }
+                    return;
+                }else if(kind==UndoKind::Preset&&editor.document.loaded()){
+                    undoPreset(again);
+                    oppTl.push_back(UndoKind::Preset);
+                    return;
+                }else if(kind==UndoKind::Terrain&&!editor.document.loaded()){
+                    auto& from=again?redo:undo;
+                    auto& to=again?undo:redo;
+                    if(!from.empty()){
+                        to.push_back(params);
+                        params=from.back();
+                        from.pop_back();
+                        oppTl.push_back(UndoKind::Terrain);
+                    }
+                    return;
+                }
+            }
+            if(editor.document.loaded())undoPreset(again);
+            else if(auto& from=again?redo:undo;!from.empty()){(again?undo:redo).push_back(params);params=from.back();from.pop_back();}
+        };
+        auto updateMeasurement=[&](){
+            measureHorizontal=measureDirect=measureSurface=measureArea=measurePerimeter=measureHeading=0;
+            measureMinY=measureMaxY=measureGain=measureLoss=measureMaxSlopeDeg=0;measureProfile.clear();measureProfileHover=-1;
+            if(measurePoints.empty())return;
+            auto segBearing=[](glm::vec3 a,glm::vec3 b){double deg=glm::degrees(std::atan2(double(b.x-a.x),double(-b.z+a.z)));return deg<0?deg+360.0:deg;};
+            auto groundY=[&](glm::vec2 xz,float fallback){float g=fallback;if(sampleGround(xz,g))return g;return fallback;};
+            if(measureMode==2){
+                if(measurePoints.size()>=2){
+                    auto a=measurePoints[0],b=measurePoints[1];
+                    double r=glm::length(glm::vec2(b.x-a.x,b.z-a.z));
+                    measureHorizontal=r;measureDirect=glm::length(b-a);measurePerimeter=2.0*3.14159265358979323846*r;measureArea=3.14159265358979323846*r*r;measureHeading=segBearing(a,b);
+                    int steps=std::clamp(int(r/8.0)+16,16,128);auto last=a;measureMinY=measureMaxY=a.y;
+                    measureProfile.push_back({0.0f,a.y,a});
+                    for(int j=1;j<=steps;++j){
+                        float t=float(j)/steps;auto pt=glm::mix(a,b,t);if(j<steps)pt.y=groundY({pt.x,pt.z},pt.y);
+                        double dh=glm::length(glm::vec2(pt.x-last.x,pt.z-last.z));double dy=pt.y-last.y;
+                        measureSurface+=glm::length(pt-last);if(dy>0)measureGain+=float(dy);else measureLoss+=float(-dy);
+                        if(dh>0.01)measureMaxSlopeDeg=std::max(measureMaxSlopeDeg,float(glm::degrees(std::atan(std::abs(dy)/dh))));
+                        measureMinY=std::min(measureMinY,pt.y);measureMaxY=std::max(measureMaxY,pt.y);
+                        measureProfile.push_back({float(r*t),pt.y,pt});last=pt;
+                    }
+                }
+                return;
+            }
+            size_t segCount=measurePoints.size()>1?(measureMode==1&&measurePoints.size()>=3?measurePoints.size():measurePoints.size()-1):0;
+            double accumH=0;measureMinY=measureMaxY=measurePoints[0].y;measureProfile.push_back({0.0f,measurePoints[0].y,measurePoints[0]});
+            for(size_t i=0;i<segCount;++i){
+                auto a=measurePoints[i],b=measurePoints[(i+1)%measurePoints.size()];
+                double h=glm::length(glm::vec2(b.x-a.x,b.z-a.z)),d3=glm::length(b-a);
+                measurePerimeter+=h;
+                if(i<measurePoints.size()-1){measureHorizontal+=h;measureDirect+=d3;measureHeading=segBearing(a,b);}
+                int steps=std::clamp(int(h/8.0)+12,12,96);auto last=a;double segSurf=0;
+                for(int j=1;j<=steps;++j){
+                    float t=float(j)/steps;auto pt=glm::mix(a,b,t);if(j<steps)pt.y=groundY({pt.x,pt.z},pt.y);
+                    double dh=glm::length(glm::vec2(pt.x-last.x,pt.z-last.z));double dy=pt.y-last.y;
+                    segSurf+=glm::length(pt-last);if(dy>0)measureGain+=float(dy);else measureLoss+=float(-dy);
+                    if(dh>0.01)measureMaxSlopeDeg=std::max(measureMaxSlopeDeg,float(glm::degrees(std::atan(std::abs(dy)/dh))));
+                    measureMinY=std::min(measureMinY,pt.y);measureMaxY=std::max(measureMaxY,pt.y);
+                    if(i<measurePoints.size()-1||measureMode==1)measureProfile.push_back({float(accumH+h*t),pt.y,pt});
+                    last=pt;
+                }
+                measureSurface+=segSurf;accumH+=h;
+            }
+            if(measureMode==1&&measurePoints.size()>=3){
+                double area=0;for(size_t i=0;i<measurePoints.size();++i){auto p0=measurePoints[i],p1=measurePoints[(i+1)%measurePoints.size()];area+=double(p0.x)*double(p1.z)-double(p1.x)*double(p0.z);}
+                measureArea=std::abs(area)*0.5;
+            }
+        };
         const PresetJson defaultView=captureView();   // Settings > Reset: the view as the app starts (launcher options included)
         auto resetAppSettings=[&](){   // view, quality, finer detail, atmosphere, camera, panels and FPS lock; keeps the preset, project content (FTF version, biome mods), points and history
             PresetJson view=defaultView;auto now=captureView();for(const char* keep:{"points","ftf_version","biome_mods"})if(now.contains(keep))view[keep]=now[keep];
-            restoreView(view,true);applyGraphics(defaultGraphics);dock.load(defaultDock);walkSpeedScale=1;
+            restoreView(view,true);applyGraphics(defaultGraphics);dock.load(defaultDock);walkSpeedScale=1;dwCfg=dw::DynamicWatersConfig{};dwPreviewRadius=4096;dwPinSet=false;dwTool=false;
             if(walkMode)leaveWalk();if(flyMode)leaveFly();++revision;editor.status="App settings reset to defaults";};
+        auto startNewProject=[&](){
+            editor.dismissLibrary();
+            if(walkMode)leaveWalk();
+            if(flyMode)leaveFly();
+            walkPickTool=false;
+            surface.cancelGeneration();
+            if(editPreview.job){editPreview.worker.cancelGeneration();editPreview.job=false;}
+            editPreview.display=EditPreview::Snapshot{};editPreview.latest=EditPreview::Snapshot{};editPreview.refining=false;editPreview.error.clear();
+            releaseAutoPatch();
+            if(backInitialized){detailBack.cancelGeneration();middleBack.cancelGeneration();backJob=swapReady=false;}
+            frontFull=false;
+            restoreView(defaultView);
+            editor.document=PresetDocument{};editor.clearHistory();editor.versionWarning=PresetVersionWarning{};editor.versionMismatchPopupPending=false;editor.feedback.clear();
+            undo.clear();redo.clear();undoTimeline.clear();redoTimeline.clear();modUndo.clear();modRedo.clear();modEditing=false;
+            project.currentFile.clear();project.restorePending=false;
+            worldSeed=options.seedSpecified?options.seed:12345;
+            previousPresetSpawn={};highlightedPoint=-1;structurePins.clear();structurePinY.clear();rwNetwork=roadweaver::RoadNetwork{};
+            census.reset();censusStatus.clear();censusWaiting=censusRequested=false;
+            baseHeightCache.clear();detailHeightCache.clear();baseHeightRevision=detailHeightRevision=pendingPickRevision=walkHeightsRevision=heightCopyRevision=0;
+            hover=HoverInfo{};
+            ftfVersionLocked=false;startupSelectedVer=ftfVersionIndex;startupSelectedId.clear();startupError.clear();startupStep=0;startupSetupOpen=true;
+            editor.status="Started new project";++revision;
+        };
         auto savePreferences=[&](){try{project.savePreferences();}catch(const std::exception& e){editor.status=e.what();}};
         bool newPresetRequested=false;char newPresetName[160]{};ImVec2 saveAsTestButton{};bool saveAsPopupObserved=false;
         auto saveProject=[&](bool asNew){if(asNew){newPresetRequested=true;strncpy_s(newPresetName,(editor.document.name+" copy").c_str(),_TRUNCATE);return;}try{
-            PresetLibrary library(project.root/"library");for(auto& entry:library.list())if(std::filesystem::weakly_canonical(entry.path)==std::filesystem::weakly_canonical(editor.document.source)){
+            PresetLibrary library(project.root/"library");for(auto& entry:library.list(ftfVersions[ftfVersionIndex].id,true))if(std::filesystem::weakly_canonical(entry.path)==std::filesystem::weakly_canonical(editor.document.source)){
                 if(entry.builtin||entry.customDefault){newPresetRequested=true;strncpy_s(newPresetName,(editor.document.name+" copy").c_str(),_TRUNCATE);return;}
-                library.save(editor.document,worldSeed,entry.name,entry.id);if(project.currentFile.empty())project.currentFile=project.root/"projects"/(entry.id+".ftfproject");break;
+                library.save(editor.document,worldSeed,entry.name,entry.id,ftfVersions[ftfVersionIndex].id);if(project.currentFile.empty())project.currentFile=project.root/"projects"/(entry.id+".ftfproject");break;
             }
             auto path=project.currentFile;if(asNew||path.empty())path=projectDialog(window,appRoot,true,asNew?editor.document.name+" copy":editor.document.name);
             if(path.empty())return;if(asNew&&!project.currentFile.empty()&&_wcsicmp(std::filesystem::weakly_canonical(path).c_str(),std::filesystem::weakly_canonical(project.currentFile).c_str())==0)throw std::runtime_error("Save as new requires a different project name.");
             project.save(path,editor.document,worldSeed,captureView());++saveSerial;editor.status="Saved project: "+path.filename().string();
         }catch(const std::exception& e){editor.status=e.what();}};
-        auto openProject=[&](){try{auto path=projectDialog(window,appRoot,false);if(path.empty())return;
+        auto openPath=[&](const std::filesystem::path& path){try{
             auto ext=path.extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),::towlower);
             if(ext==L".ftfproject")restoreView(project.load(path,editor.document,worldSeed));else{editor.loadDocument(path,worldSeed);project.currentFile.clear();presetLoaded();}
+            if(startupSetupOpen){ftfVersionIndex=startupSelectedVer;ftfVersionLocked=true;editor.setActiveFtfVersion(ftfVersions[ftfVersionIndex].id);editor.refreshVersionWarning();if(editor.versionWarning.mismatch&&interactiveLaunch)editor.versionMismatchPopupPending=true;startupSetupOpen=false;}
             project.restorePending=false;editor.status="Opened "+path.filename().string();
+        }catch(const std::exception& e){editor.status=e.what();}};
+        auto openProject=[&](){try{auto path=projectDialog(window,appRoot,false);if(path.empty())return;openPath(path);
         }catch(const std::exception& e){editor.status=e.what();}};
         auto paletteLegends=[&](){
                 if(sectionIconHeader(biomeColors==3?"Biome tint legend":"Biome color legend")){ImGui::BeginChild("Biome legend",ImVec2(0,150),true);const char* key=biomeColors==0?"map":biomeColors==2?"foliage":"grass";for(auto& b:biomeLegend["biomes"]){uint32_t rgb=b[key];ImGui::ColorButton(("##biome"+std::to_string(b["id"].get<int>())).c_str(),ImVec4(((rgb>>16)&255)/255.0f,((rgb>>8)&255)/255.0f,(rgb&255)/255.0f,1),ImGuiColorEditFlags_NoTooltip,ImVec2(13,13));ImGui::SameLine();ImGui::TextUnformatted(b["name"].get<std::string>().c_str());}ImGui::EndChild();}
@@ -431,6 +695,11 @@ int main(int argc,char** argv){
         };
         while(!glfwWindowShouldClose(window)&&(options.frames==0||frameNumber<options.frames)){
             auto start=Clock::now();double dt=std::chrono::duration<double>(start-lastFrame).count();lastFrame=start;elapsed+=dt;
+            if(!g_droppedFiles.empty()){   // drag and drop: .ftfproject (saved/autosaved projects), preset .json or datapack .zip
+                auto dropped=g_droppedFiles.front();g_droppedFiles.clear();
+                auto dext=dropped.extension().wstring();std::transform(dext.begin(),dext.end(),dext.begin(),::towlower);
+                if(dext==L".ftfproject"||dext==L".json"||dext==L".zip")openPath(dropped);else editor.status="Cannot open dropped file: "+dropped.filename().string();
+            }
             if(censusWaiting){try{census=summarizeBiomeCensus(biomeLegend,censusPossible,biomeSurface.generatedBiomes(),censusParams.domain.x,int(censusParams.meta.x));censusStatus.clear();}catch(const std::exception& e){census.reset();censusStatus=e.what();}censusWaiting=false;}
             glfwPollEvents();auto cmd=gpu.begin();if(!cmd){glfwWaitEventsTimeout(.02);continue;}
             smoothedFrame=smoothedFrame*.95+dt*1000*.05;
@@ -510,6 +779,8 @@ int main(int argc,char** argv){
             if(options.countBiomes>0&&frameNumber==3){censusGrid=options.countBiomes;censusRequested=true;}
             if(ImGui::BeginMainMenuBar()){
                 if(ImGui::BeginMenu("File")){
+                    if(ImGui::MenuItem("New...","Ctrl+N"))newProjectRequested=true;
+                    ImGui::Separator();
                     if(ImGui::MenuItem("Open project, preset or datapack...","Ctrl+O"))openProject();
                     if(ImGui::MenuItem("Open datapack folder...")){if(editor.importFolder(worldSeed)){presetLoaded();project.currentFile.clear();project.restorePending=false;}}
                     if(ImGui::MenuItem("Preset library..."))editor.showLibrary();
@@ -569,18 +840,27 @@ int main(int argc,char** argv){
                 ImGui::SameLine(std::max(ImGui::GetCursorPosX()+8,ImGui::GetWindowWidth()-124));
                 auto windowControl=[&](const char* label,ImVec4 color,const char* hint){ImGui::PushStyleColor(ImGuiCol_Button,color);bool hit=ImGui::Button((std::string("##window")+label).c_str(),{34,20});ImGui::PopStyleColor();auto a=ImGui::GetItemRectMin();ImVec2 c{a.x+17,a.y+10};auto* d=ImGui::GetWindowDrawList();auto ink=IM_COL32(245,248,250,255);if(label[0]=='_')d->AddLine({c.x-5,c.y+4},{c.x+5,c.y+4},ink,1.6f);else if(label[0]=='[')d->AddRect({c.x-5,c.y-5},{c.x+5,c.y+5},ink,0,0,1.5f);else{d->AddLine({c.x-4,c.y-4},{c.x+4,c.y+4},ink,1.7f);d->AddLine({c.x-4,c.y+4},{c.x+4,c.y-4},ink,1.7f);}if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",hint);return hit;};
                 if(windowControl("_",{.55f,.40f,.10f,1},"Minimize"))glfwIconifyWindow(window);ImGui::SameLine(0,4);
-                if(windowControl("[]",{.12f,.42f,.29f,1},"Maximize or restore")){if(glfwGetWindowMonitor(window))glfwSetWindowMonitor(window,nullptr,windowedX,windowedY,windowedW,windowedH,0);else if(glfwGetWindowAttrib(window,GLFW_MAXIMIZED))glfwRestoreWindow(window);else glfwMaximizeWindow(window);chrome.refresh();}ImGui::SameLine(0,4);
+                if(windowControl("[]",{.12f,.42f,.29f,1},"Maximize or restore")){if(glfwGetWindowMonitor(window))glfwSetWindowMonitor(window,nullptr,windowedX,windowedY,windowedW,windowedH,0);else if(glfwGetWindowAttrib(window,GLFW_MAXIMIZED))glfwRestoreWindow(window);else{glfwGetWindowPos(window,&windowedX,&windowedY);glfwGetWindowSize(window,&windowedW,&windowedH);glfwMaximizeWindow(window);}chrome.refresh();}ImGui::SameLine(0,4);
                 if(windowControl("X",{.65f,.16f,.19f,1},"Exit (asks to save)"))closeRequested=true;
                 ImGui::EndMainMenuBar();
             }
             {   // File/history shortcuts in every navigation mode. In walk and fly they are read straight from the keyboard (the camera
                 // owns the mouse and keys there, and the UI layer did not see them reliably); elsewhere through ImGui (tests inject them).
-                const bool cameraMode=(walkMode||flyMode)&&!options.hidden;bool ctrl=io.KeyCtrl,shift=io.KeyShift,keyO=false,keyS=false,keyZ=false,keyY=false;
+                const bool cameraMode=(walkMode||flyMode)&&!options.hidden;bool ctrl=io.KeyCtrl,shift=io.KeyShift,keyO=false,keyS=false,keyZ=false,keyY=false,keyN=false;
                 if(cameraMode){auto down=[&](int k){return glfwGetKey(window,k)==GLFW_PRESS;};ctrl=down(GLFW_KEY_LEFT_CONTROL)||down(GLFW_KEY_RIGHT_CONTROL);shift=down(GLFW_KEY_LEFT_SHIFT)||down(GLFW_KEY_RIGHT_SHIFT);
-                    bool now[4]={down(GLFW_KEY_O),down(GLFW_KEY_S),down(GLFW_KEY_Z),down(GLFW_KEY_Y)};keyO=now[0]&&!shortcutHeld[0];keyS=now[1]&&!shortcutHeld[1];keyZ=now[2]&&!shortcutHeld[2];keyY=now[3]&&!shortcutHeld[3];for(int i=0;i<4;++i)shortcutHeld[i]=now[i];}
-                else{for(bool& held:shortcutHeld)held=false;keyO=ImGui::IsKeyPressed(ImGuiKey_O,false);keyS=ImGui::IsKeyPressed(ImGuiKey_S,false);keyZ=ImGui::IsKeyPressed(ImGuiKey_Z,false);keyY=ImGui::IsKeyPressed(ImGuiKey_Y,false);}
-                if(!project.restorePending&&ctrl){if(!io.WantTextInput&&keyO)openProject();if(!ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId)&&keyS)saveProject(shift);if(!io.WantTextInput&&(keyZ||keyY)){bool again=shift||keyY;if(editor.document.loaded())undoPreset(again);else if(auto& from=again?redo:undo;!from.empty()){(again?undo:redo).push_back(params);params=from.back();from.pop_back();}}}
+                    bool now[5]={down(GLFW_KEY_O),down(GLFW_KEY_S),down(GLFW_KEY_Z),down(GLFW_KEY_Y),down(GLFW_KEY_N)};keyO=now[0]&&!shortcutHeld[0];keyS=now[1]&&!shortcutHeld[1];keyZ=now[2]&&!shortcutHeld[2];keyY=now[3]&&!shortcutHeld[3];keyN=now[4]&&!shortcutHeld[4];for(int i=0;i<5;++i)shortcutHeld[i]=now[i];}
+                else{for(bool& held:shortcutHeld)held=false;keyO=ImGui::IsKeyPressed(ImGuiKey_O,false);keyS=ImGui::IsKeyPressed(ImGuiKey_S,false);keyZ=ImGui::IsKeyPressed(ImGuiKey_Z,false);keyY=ImGui::IsKeyPressed(ImGuiKey_Y,false);keyN=ImGui::IsKeyPressed(ImGuiKey_N,false);}
+                if(!project.restorePending&&ctrl){if(!io.WantTextInput&&!startupSetupOpen&&!ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId)&&keyN)newProjectRequested=true;if(!io.WantTextInput&&keyO)openProject();if(!ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId)&&keyS)saveProject(shift);if(!io.WantTextInput&&(keyZ||keyY)){bool again=shift||keyY;performUndo(again);}}
             }
+            if(newProjectRequested){newProjectRequested=false;if(!editor.document.loaded()||project.restorePending)startNewProject();else{editor.dismissLibrary();ImGui::OpenPopup("Save before starting new project?");}}
+            if(ImGui::BeginPopupModal("Save before starting new project?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+                ImGui::TextUnformatted("Save your current preset and project before starting a new project?");
+                ImGui::BeginDisabled(!editor.document.loaded()||project.restorePending);if(ImGui::Button("Save and new")){newAfterSave=true;newSaveSerial=saveSerial;ImGui::CloseCurrentPopup();saveProject(false);}ImGui::EndDisabled();
+                ImGui::SameLine();if(ImGui::Button("New without saving")){ImGui::CloseCurrentPopup();startNewProject();}
+                ImGui::SameLine();if(ImGui::Button("Cancel")||ImGui::IsKeyPressed(ImGuiKey_Escape,false))ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            }
+            if(newAfterSave){if(saveSerial>newSaveSerial){startNewProject();newAfterSave=false;}else if(!newPresetRequested&&!ImGui::IsPopupOpen("Save as new preset"))newAfterSave=false;}
             if(closeRequested){editor.dismissLibrary();ImGui::OpenPopup("Save before exiting?");closeRequested=false;}
             if(resetSettingsRequested){ImGui::OpenPopup("Reset all app settings?");resetSettingsRequested=false;}
             if(ImGui::BeginPopupModal("Reset all app settings?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
@@ -603,13 +883,148 @@ int main(int argc,char** argv){
                 saveAsPopupObserved=true;ImGui::InputText(labelAbove("New name",320).c_str(),newPresetName,sizeof(newPresetName));
                 bool saveNewClicked=ImGui::Button("Save new preset");auto saveMin=ImGui::GetItemRectMin(),saveMax=ImGui::GetItemRectMax();saveAsTestButton={(saveMin.x+saveMax.x)*.5f,(saveMin.y+saveMax.y)*.5f};if(saveNewClicked){try{
                     PresetLibrary library(project.root/"library");std::string name=newPresetName;
-                    for(auto& entry:library.list())if(entry.name==name)throw std::runtime_error("Choose a new, unused preset name.");
-                    auto entry=library.save(editor.document,worldSeed,name);editor.document.source=entry.path;editor.document.name=entry.name;
+                    for(auto& entry:library.list(ftfVersions[ftfVersionIndex].id,true))if(entry.name==name)throw std::runtime_error("Choose a new, unused preset name.");
+                    auto entry=library.save(editor.document,worldSeed,name,{},ftfVersions[ftfVersionIndex].id);editor.document.source=entry.path;editor.document.name=entry.name;
                     project.currentFile=project.root/"projects"/(entry.id+".ftfproject");project.save(project.currentFile,editor.document,worldSeed,captureView());++saveSerial;editor.status="Saved new preset: "+name;ImGui::CloseCurrentPopup();
                 }catch(const std::exception& e){editor.status=e.what();}}
                 ImGui::SameLine();if(ImGui::Button("Cancel")){closeAfterSave=false;ImGui::CloseCurrentPopup();}ImGui::TextWrapped("%s",editor.status.c_str());ImGui::EndPopup();
             }
-            if(project.restorePending&&!restoreDialogRequested){ImGui::OpenPopup("Restore last project?");restoreDialogRequested=true;}
+            if(startupSetupOpen){
+                if(!ImGui::IsPopupOpen("FTF Surface Lab Setup"))ImGui::OpenPopup("FTF Surface Lab Setup");
+                auto* vpCenter=ImGui::GetMainViewport();
+                ImGui::SetNextWindowPos(vpCenter->GetCenter(),ImGuiCond_Always,{.5f,.5f});
+                ImGui::SetNextWindowSize({std::min(700.0f,vpCenter->Size.x-40.0f),std::min(620.0f,vpCenter->Size.y-40.0f)},ImGuiCond_Always);
+                if(ImGui::BeginPopupModal("FTF Surface Lab Setup",nullptr,ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoCollapse)){
+                    ImGui::TextColored({.4f,.86f,.72f,1},"FTF Surface Lab");
+                    ImGui::SameLine();
+                    ImGui::TextDisabled(startupStep==0?"Step 1 of 2: Choose FTF version":"Step 2 of 2: Choose starting preset");
+                    ImGui::Separator();ImGui::Spacing();
+                    if(startupStep==0){
+                        ImGui::TextWrapped("Select the FreeTerraForged version to run for this session. Because preset defaults and worldgen differ between versions, the FTF version is locked once you start.");
+                        ImGui::Spacing();
+                        ImGui::BeginChild("StartupVersionList",{0,-(project.restorePending?124.0f:68.0f)},true);
+                        for(int i=0;i<ftfVersionCount;++i){
+                            bool sel=(startupSelectedVer==i);
+                            ImGui::PushID(i);
+                            if(sel)ImGui::PushStyleColor(ImGuiCol_Header,ImVec4(.14f,.38f,.36f,1));
+                            if(ImGui::Selectable(ftfVersions[i].label,sel,ImGuiSelectableFlags_None,{0,0})){startupSelectedVer=i;startupSelectedId.clear();}
+                            if(sel)ImGui::PopStyleColor();
+                            ImGui::Indent(14.0f);ImGui::PushStyleColor(ImGuiCol_Text,ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));ImGui::TextWrapped("%s",ftfVersions[i].note);ImGui::PopStyleColor();ImGui::Unindent(14.0f);
+                            ImGui::Spacing();
+                            ImGui::PopID();
+                        }
+                        ImGui::EndChild();
+                        if(project.restorePending){
+                            ImGui::Spacing();
+                            ImGui::TextColored({.96f,.72f,.22f,1},"Previous session available:");
+                            if(ImGui::Button("Restore previous session",{230,0})){
+                                try{restoreView(project.load(project.recoveryPath(),editor.document,worldSeed,true));editor.setActiveFtfVersion(ftfVersions[ftfVersionIndex].id);ftfVersionLocked=true;startupSetupOpen=false;startupError.clear();editor.status="Restored last working project";ImGui::CloseCurrentPopup();}
+                                catch(const std::exception& e){startupError=e.what();}
+                            }
+                            ImGui::SameLine();ImGui::TextDisabled("Loads saved preset, seed, and its FTF version.");
+                        }
+                        ImGui::Spacing();
+                        if(ImGui::Button("Next: Choose Preset >",{240,30})){
+                            ftfVersionIndex=startupSelectedVer;editor.setActiveFtfVersion(ftfVersions[ftfVersionIndex].id);startupSelectedId.clear();startupError.clear();startupStep=1;
+                        }
+                        ImGui::SameLine();
+                        if(ImGui::Button("Open external preset / project...",{240,30})){
+                            ftfVersionIndex=startupSelectedVer;editor.setActiveFtfVersion(ftfVersions[ftfVersionIndex].id);
+                            openProject();
+                            if(editor.document.loaded()){ftfVersionLocked=true;startupSetupOpen=false;ImGui::CloseCurrentPopup();}
+                        }
+                    }else{
+                        const std::string targetVer=ftfVersions[startupSelectedVer].id;
+                        ImGui::TextColored({.4f,.86f,.72f,1},"Target FTF version: %s",ftfVersions[startupSelectedVer].label);
+                        ImGui::TextWrapped("Choose an inbuilt default, Custom Default, or Custom preset for FTF %s, or open an external file.",targetVer.c_str());
+                        ImGui::Checkbox("Show presets from other FTF versions",&startupShowOtherVersions);
+                        auto entries=PresetLibrary(project.root/"library").list(targetVer,true);
+                        auto entryVisible=[&](const LibraryEntry& e){return startupShowOtherVersions||e.ftfVersion==targetVer;};
+                        if(startupSelectedId.empty()||std::none_of(entries.begin(),entries.end(),[&](const LibraryEntry& e){return e.id==startupSelectedId&&entryVisible(e);})){
+                            auto preferred=std::find_if(entries.begin(),entries.end(),[&](const LibraryEntry& e){return e.builtin&&e.ftfVersion==targetVer;});
+                            if(preferred==entries.end())preferred=std::find_if(entries.begin(),entries.end(),entryVisible);
+                            startupSelectedId=(preferred!=entries.end())?preferred->id:std::string{};
+                        }
+                        auto chosenIt=std::find_if(entries.begin(),entries.end(),[&](const LibraryEntry& e){return e.id==startupSelectedId;});
+                        const bool chosenDiffVer=(chosenIt!=entries.end()&&chosenIt->ftfVersion!=targetVer);
+                        std::vector<std::string> step2Versions{targetVer};
+                        if(startupShowOtherVersions)for(const char* ver:ftfPresetVersionOrder())if(targetVer!=ver)step2Versions.emplace_back(ver);
+                        ImGui::BeginChild("StartupPresetList",{0,-(chosenDiffVer?140.0f:114.0f)},true);
+                        auto drawStartupSection=[&](const std::string& header,bool defaultOpen,auto&& pred){
+                            ImGuiTreeNodeFlags flags=defaultOpen?ImGuiTreeNodeFlags_DefaultOpen:ImGuiTreeNodeFlags_None;
+                            if(!ImGui::CollapsingHeader(header.c_str(),flags))return;
+                            bool any=false;
+                            for(const auto& e:entries){
+                                if(!pred(e))continue;
+                                any=true;
+                                const bool crossVer=e.ftfVersion!=targetVer;
+                                if(crossVer)ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0.96f,0.78f,0.38f,1.0f));
+                                if(ImGui::Selectable((libraryDisplayLabel(e)+"##startup_"+e.id).c_str(),startupSelectedId==e.id))startupSelectedId=e.id;
+                                if(crossVer)ImGui::PopStyleColor();
+                            }
+                            if(!any)ImGui::TextDisabled("No presets%s",startupShowOtherVersions?"":" matching this FTF version");
+                        };
+                        for(const auto& ver:step2Versions){
+                            std::string hdr="Default - FTF "+ver+(ver==targetVer?" (Selected)":"");
+                            drawStartupSection(hdr,ver==targetVer,[&](const LibraryEntry& e){return e.builtin&&e.ftfVersion==ver;});
+                        }
+                        drawStartupSection("Custom Defaults",true,[&](const LibraryEntry& e){return !e.builtin&&e.customDefault&&entryVisible(e);});
+                        drawStartupSection("Custom",true,[&](const LibraryEntry& e){return !e.builtin&&!e.customDefault&&entryVisible(e);});
+                        ImGui::EndChild();
+                        chosenIt=std::find_if(entries.begin(),entries.end(),[&](const LibraryEntry& e){return e.id==startupSelectedId;});
+                        if(chosenIt!=entries.end()&&chosenIt->ftfVersion!=targetVer){
+                            if(chosenIt->ftfVersion.empty())ImGui::TextColored({.96f,.72f,.22f,1},"Note: Legacy preset has no recorded FTF version tag (active session: %s).",targetVer.c_str());
+                            else ImGui::TextColored({.96f,.72f,.22f,1},"Warning: Preset is made for FTF %s; session will run FTF %s.",chosenIt->ftfVersion.c_str(),targetVer.c_str());
+                        }
+                        ImGui::Spacing();
+                        ImGui::TextUnformatted("World seed");ImGui::SameLine();
+                        ImGui::SetNextItemWidth(200);ImGui::InputScalar("##startupSeed",ImGuiDataType_S64,&worldSeed);
+                        ImGui::SameLine();ImGui::PushID("startupSeedCopy");copySeedButton(worldSeed);ImGui::PopID();
+                        ImGui::SameLine();ImGui::PushID("startupSeedRand");randomiseSeedButton(worldSeed,true);ImGui::PopID();
+                        ImGui::Spacing();
+                        bool startClicked=ImGui::Button("Start with selected preset",{230,30})||(options.exerciseStartup==3&&frameNumber==2);
+                        if(startClicked&&chosenIt!=entries.end()){
+                            try{
+                                ftfVersionIndex=startupSelectedVer;
+                                editor.setActiveFtfVersion(ftfVersions[ftfVersionIndex].id);
+                                int64_t chosenSeed=worldSeed;
+                                editor.loadDocument(chosenIt->path,chosenSeed);
+                                if(!chosenIt->ftfVersion.empty())editor.document.sourceFtfVersion=chosenIt->ftfVersion;
+                                if(!chosenIt->builtin&&editor.document.worldSeed)worldSeed=chosenSeed;
+                                ftfVersionLocked=true;
+                                presetLoaded();
+                                project.currentFile.clear();
+                                project.restorePending=false;
+                                startupSetupOpen=false;
+                                startupError.clear();
+                                ImGui::CloseCurrentPopup();
+                            }catch(const std::exception& e){startupError=e.what();}
+                        }
+                        ImGui::SameLine();
+                        if(ImGui::Button("< Back",{100,30})){startupError.clear();startupStep=0;}
+                        ImGui::SameLine();
+                        if(ImGui::Button("Open external file...",{180,30})){
+                            ftfVersionIndex=startupSelectedVer;editor.setActiveFtfVersion(ftfVersions[ftfVersionIndex].id);
+                            openProject();
+                            if(editor.document.loaded()){ftfVersionLocked=true;startupSetupOpen=false;ImGui::CloseCurrentPopup();}
+                        }
+                    }
+                    if(!startupError.empty()){ImGui::Spacing();ImGui::TextColored({1,.45f,.4f,1},"%s",startupError.c_str());}
+                    ImGui::EndPopup();
+                }
+            }
+            if(!startupSetupOpen&&editor.versionMismatchPopupPending&&interactiveLaunch){ImGui::OpenPopup("Preset version mismatch");editor.versionMismatchPopupPending=false;}
+            if(ImGui::BeginPopupModal("Preset version mismatch",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+                ImGui::TextColored({.96f,.72f,.22f,1},"WARNING: Preset FTF Version Mismatch");
+                ImGui::Spacing();
+                ImGui::PushTextWrapPos(460.0f);
+                ImGui::TextWrapped("%s",editor.versionWarning.summary.c_str());
+                ImGui::PopTextWrapPos();
+                ImGui::Spacing();
+                if(ImGui::Button("Continue anyway",{160,0})||ImGui::IsKeyPressed(ImGuiKey_Escape,false))ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            }
+            if(!startupSetupOpen&&project.restorePending&&!restoreDialogRequested){ImGui::OpenPopup("Restore last project?");restoreDialogRequested=true;}
             if(ImGui::BeginPopupModal("Restore last project?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
                 ImGui::TextUnformatted("Restore the preset and view from your last session?");
                 bool restoreClicked=ImGui::Button("Restore");if(options.testRestoreAccept&&frameNumber==2){auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();restoreTestClick={(a.x+b.x)*.5f,(a.y+b.y)*.5f};}
@@ -624,13 +1039,26 @@ int main(int argc,char** argv){
             if(ImGui::Button("Export preset"))editor.exportAction(false,worldSeed);nextAction("Export datapack");if(ImGui::Button("Export datapack"))editor.exportAction(true,worldSeed);ImGui::EndDisabled();}dock.end(actionsVisible);
 
             const ImGuiViewport* vp=ImGui::GetMainViewport();
-            bool changed=false;TerrainParams before=params;bool leftVisible=dock.begin("Surface controls",dock.left,dock.leftHidden,"<",">");leftCollapsed=dock.leftHidden;if(leftVisible){
+            bool changed=false;TerrainParams before=params;ModConfigSnapshot modBefore=captureModConfig();size_t presetHistBefore=editor.historyPosition();bool leftVisible=dock.begin("Surface controls",dock.left,dock.leftHidden,"<",">");leftCollapsed=dock.leftHidden;if(leftVisible){
             sectionBar("FTF version");ImGui::SetNextItemWidth(-1);
-            if(ImGui::BeginCombo("##ftfVersion",ftfVersions[ftfVersionIndex].label)){for(int i=0;i<ftfVersionCount;++i){if(ImGui::Selectable(ftfVersions[i].label,i==ftfVersionIndex))ftfVersionIndex=i;if(i==ftfVersionIndex)ImGui::SetItemDefaultFocus();}ImGui::EndCombo();}
-            ImGui::PushStyleColor(ImGuiCol_Text,ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));ImGui::TextWrapped("%s",ftfVersions[ftfVersionIndex].note);ImGui::PopStyleColor();ImGui::Spacing();
+            ImGui::BeginDisabled(ftfVersionLocked);
+            if(ImGui::BeginCombo("##ftfVersion",ftfVersions[ftfVersionIndex].label)){for(int i=0;i<ftfVersionCount;++i){if(ImGui::Selectable(ftfVersions[i].label,i==ftfVersionIndex)){ftfVersionIndex=i;editor.setActiveFtfVersion(ftfVersions[ftfVersionIndex].id);}if(i==ftfVersionIndex)ImGui::SetItemDefaultFocus();}ImGui::EndCombo();}
+            ImGui::EndDisabled();
+            if(ftfVersionLocked&&ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("FTF version can only be chosen on startup or via File > New.");
+            ImGui::PushStyleColor(ImGuiCol_Text,ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));ImGui::TextWrapped("%s",ftfVersions[ftfVersionIndex].note);if(ftfVersionLocked)ImGui::TextWrapped("Locked to startup choice (use File > New to change FTF version).");ImGui::PopStyleColor();ImGui::Spacing();
             sectionBar(params.meta.z==5?"Preset":params.meta.z==3||params.meta.z==6?"Preset (diagnostic view)":"Preset (development view)");
             editor.document.previewExtent=params.domain.x;if(editor.toolbar(worldSeed,true)){presetLoaded();if(params.meta.z==0||params.meta.z==1)params.meta.z=5;}
-            ImGui::TextUnformatted("World seed");ImGui::SetNextItemWidth(std::max(100.0f,ImGui::GetContentRegionAvail().x-28-ImGui::GetStyle().ItemSpacing.x));ImGui::InputScalar("##worldseed",ImGuiDataType_S64,&worldSeed);ImGui::SameLine();ImGui::PushID("worldSeedRandomise");randomiseSeedButton(worldSeed,true);ImGui::PopID();
+            if(editor.versionWarning.mismatch){
+                ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(0.28f,0.18f,0.03f,0.85f));
+                ImGui::PushStyleColor(ImGuiCol_Border,ImVec4(0.95f,0.68f,0.18f,0.95f));
+                ImGui::BeginChild("##presetVerWarn",ImVec2(0,0),ImGuiChildFlags_Borders|ImGuiChildFlags_AutoResizeY);
+                ImGui::TextColored(ImVec4(1.0f,0.78f,0.28f,1.0f),"WARNING: Preset Version Mismatch");
+                ImGui::TextWrapped("%s",editor.versionWarning.summary.c_str());
+                ImGui::EndChild();
+                ImGui::PopStyleColor(2);
+                ImGui::Spacing();
+            }
+            ImGui::TextUnformatted("World seed");ImGui::SetNextItemWidth(std::max(80.0f,ImGui::GetContentRegionAvail().x-2*(28+ImGui::GetStyle().ItemSpacing.x)));ImGui::InputScalar("##worldseed",ImGuiDataType_S64,&worldSeed);ImGui::SameLine();ImGui::PushID("worldSeedCopy");copySeedButton(worldSeed);ImGui::PopID();ImGui::SameLine();ImGui::PushID("worldSeedRandomise");randomiseSeedButton(worldSeed,true);ImGui::PopID();
             if(editor.document.loaded()){
                 if(params.meta.z==5)ImGui::TextWrapped("FTF surface: selected continent generator, terrain, oceans, islands, rivers and world filters. Minecraft surface biomes are selected from FTF climate and terrain parameters.");
                 else if(params.meta.z==6)ImGui::TextWrapped("Continent map: edge and identity; Uplift additionally supplies a water table and size modifier. Layer choices show edge, water table or size. Property edits keep this diagnostic view selected.");
@@ -645,7 +1073,7 @@ int main(int argc,char** argv){
                     list->AddTriangleFilled({c.x-direction*9,c.y-7},{c.x-direction*1,c.y-7},{c.x-direction*7,c.y-1},ink);
                     if(ImGui::IsItemHovered())ImGui::SetTooltip(redo?"Redo preset edit [Ctrl+Shift+Z]":"Undo preset edit [Ctrl+Z]");return clicked;
                 };
-                if(historyButton(false))undoPreset(false);ImGui::SameLine();if(historyButton(true))undoPreset(true);
+                if(historyButton(false))performUndo(false);ImGui::SameLine();if(historyButton(true))performUndo(true);
                 editor.historyPanel();
                 if(ImGui::Button("Reset preset to last saved state"))editor.resetToSaved("");
                 auto oldMode=params.meta.z;int oldTerrain=editor.terrainSelection;bool oldHighlight=editor.highlightTerrain,oldIsolate=editor.isolateTerrain;editor.properties(params);if((oldTerrain!=editor.terrainSelection||oldHighlight!=editor.highlightTerrain||oldIsolate!=editor.isolateTerrain)&&(editor.highlightTerrain||editor.isolateTerrain)&&params.meta.z!=4&&params.meta.z!=5)params.meta.z=5;if(oldMode!=params.meta.z){layer=0;topDown=params.meta.z==3;}
@@ -658,22 +1086,72 @@ int main(int argc,char** argv){
             if(!keysBlocked&&ImGui::IsKeyPressed(ImGuiKey_H,false)){if(io.KeyShift)openToolSettingsRequested=true;}
             detailTool=false;if(detailPlaced&&!detailAuto)detailPlaced=false;   /* the manual High detail tool is gone; adaptive finer detail replaces it */
             if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_R,false))resetCamera();
-            if(!keysBlocked&&ImGui::IsKeyPressed(ImGuiKey_Escape,false)&&!ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId)){detailTool=centerTool=spawnTool=measureTool=pointTool=copyTool=false;}
+            if(!keysBlocked&&ImGui::IsKeyPressed(ImGuiKey_Escape,false)&&!ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId)){detailTool=centerTool=spawnTool=measureTool=pointTool=copyTool=dwTool=false;}
             if(!keysBlocked&&!io.KeyCtrl&&!topDown&&ImGui::IsKeyPressed(ImGuiKey_F,false)){if(flyMode)leaveFly();else enterFly();}
             if(!io.WantTextInput&&ImGui::IsKeyPressed(ImGuiKey_Escape,false)&&!ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId)){walkPickTool=false;if(walkMode)leaveWalk();else if(flyMode)leaveFly();} // Esc leaves walk mode and the fly camera
             if(!io.WantTextInput&&!io.KeyCtrl&&!topDown&&ImGui::IsKeyPressed(ImGuiKey_G,false)){if(walkMode)leaveWalk();else if(hover.valid)enterWalk({hover.position.x,hover.position.z});else{auto spawn=editor.document.loaded()?editor.document.spawn():glm::vec2(params.domain.y,params.domain.z);enterWalk(spawn);}}
-            if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_B,false)){pointTool=!pointTool;if(pointTool){detailTool=centerTool=spawnTool=measureTool=false;}}
-            if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_C,false)){centerTool=!centerTool;detailTool=spawnTool=measureTool=false;}
-            if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_P,false)){spawnTool=!spawnTool;detailTool=centerTool=measureTool=false;}
-            if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_M,false)){measureTool=!measureTool;detailTool=centerTool=spawnTool=false;}
-            if(measureTool&&!keysBlocked){if(ImGui::IsKeyPressed(ImGuiKey_Backspace,false)&&!measurePoints.empty()){measurePoints.pop_back();updateMeasurement();}if(ImGui::IsKeyPressed(ImGuiKey_Enter,false))measureTool=false;}
-            if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_K,false)){copyTool=!copyTool;if(copyTool){detailTool=centerTool=spawnTool=measureTool=pointTool=walkPickTool=false;}}
-            if(centerTool||spawnTool||measureTool||pointTool||walkPickTool)copyTool=false;
-            if(detailTool||centerTool||spawnTool||measureTool)pointTool=false;
+            if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_B,false)){pointTool=!pointTool;if(pointTool){detailTool=centerTool=spawnTool=measureTool=dwTool=false;}}
+            if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_C,false)){centerTool=!centerTool;detailTool=spawnTool=measureTool=dwTool=false;}
+            if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_P,false)){spawnTool=!spawnTool;detailTool=centerTool=measureTool=dwTool=false;}
+            if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_M,false)){measureTool=!measureTool;detailTool=centerTool=spawnTool=dwTool=false;}
+            if(measureTool&&!keysBlocked){if(ImGui::IsKeyPressed(ImGuiKey_Backspace,false)&&!measurePoints.empty()){measurePoints.pop_back();updateMeasurement();}if(ImGui::IsKeyPressed(ImGuiKey_Delete,false)&&!measurePoints.empty()){measurePoints.clear();updateMeasurement();}if(ImGui::IsKeyPressed(ImGuiKey_Enter,false))measureTool=false;}
+            if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_K,false)){copyTool=!copyTool;if(copyTool){detailTool=centerTool=spawnTool=measureTool=pointTool=walkPickTool=dwTool=false;}}
+            if(!keysBlocked&&!io.KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_U,false)){dwTool=!dwTool;if(dwTool){detailTool=centerTool=spawnTool=measureTool=pointTool=copyTool=walkPickTool=false;}}
+            if(centerTool||spawnTool||measureTool||pointTool||walkPickTool||dwTool)copyTool=false;
+            if(detailTool||centerTool||spawnTool||measureTool||dwTool)pointTool=false;
             if(rightVisible){
             int selectedTool=detailTool?1:centerTool?2:spawnTool?3:measureTool?4:pointTool?6:0;if(selectedTool!=previousTool){ImGui::SetScrollY(0);previousTool=selectedTool;}
+            auto warningBanner=[&](const char* heading,const char* detail){
+                ImGui::Spacing();
+                ImVec2 p=ImGui::GetCursorScreenPos();
+                float availW=ImGui::GetContentRegionAvail().x;
+                float wrapW=std::max(100.0f,availW-18.0f);
+                ImVec2 ts=ImGui::CalcTextSize(detail,nullptr,false,wrapW);
+                float h=ts.y+ImGui::GetTextLineHeight()+14.0f;
+                ImU32 bg=ImGui::GetColorU32(ImVec4(0.95f,0.68f,0.16f,0.16f));
+                ImU32 bar=ImGui::GetColorU32(ImVec4(0.95f,0.72f,0.20f,0.95f));
+                ImU32 border=ImGui::GetColorU32(ImVec4(0.95f,0.68f,0.16f,0.45f));
+                auto* dl=ImGui::GetWindowDrawList();
+                dl->AddRectFilled(p,ImVec2(p.x+availW,p.y+h),bg,4.0f);
+                dl->AddRect(p,ImVec2(p.x+availW,p.y+h),border,4.0f);
+                dl->AddRectFilled(p,ImVec2(p.x+4.0f,p.y+h),bar,2.0f);
+                ImGui::SetCursorScreenPos(ImVec2(p.x+10.0f,p.y+4.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1.0f,0.82f,0.34f,1.0f));
+                ImGui::TextUnformatted(heading);
+                ImGui::PopStyleColor();
+                ImGui::SetCursorScreenPos(ImVec2(p.x+10.0f,p.y+4.0f+ImGui::GetTextLineHeight()+2.0f));
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+wrapW);
+                ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0.96f,0.88f,0.68f,0.95f));
+                ImGui::TextUnformatted(detail);
+                ImGui::PopStyleColor();
+                ImGui::PopTextWrapPos();
+                ImGui::SetCursorScreenPos(ImVec2(p.x,p.y+h+4.0f));
+                ImGui::Dummy(ImVec2(0.0f,0.0f));
+            };
+            auto expWarning=[&](const char* modLabel,const char* detail){
+                std::string heading=std::string("EXPERIMENTAL: ")+modLabel;
+                warningBanner(heading.c_str(),detail);
+            };
+            if(ImGui::BeginTabBar("RightInspectorTabs")){
+            if(ImGui::BeginTabItem("View & Scene",nullptr,restoredRightTab==0?ImGuiTabItemFlags_SetSelected:0)){
+            activeRightTab=0;
             sectionBar("Selected tool");
-            if(measureTool){ImGui::TextUnformatted("Measure [M]");ImGui::Text("%zu points",measurePoints.size());if(ImGui::Button("Clear measurement")){measurePoints.clear();updateMeasurement();}}
+            if(measureTool){
+                ImGui::TextUnformatted("Measure [M]");
+                const char* modes[]={"Path","Polygon","Circle"};
+                if(ImGui::Combo("Mode",&measureMode,modes,3))updateMeasurement();
+                const char* units[]={"Blocks (m)","Chunks (16m)","Kilometres"};
+                ImGui::Combo("Units",&measureUnit,units,3);
+                ImGui::Checkbox("Follow terrain",&measureFollowTerrain);
+                ImGui::Checkbox("Elevation profile",&measureShowProfile);
+                ImGui::Text("%zu point%s",measurePoints.size(),measurePoints.size()==1?"":"s");
+                if(ImGui::Button("Undo")&&!measurePoints.empty()){measurePoints.pop_back();updateMeasurement();}
+                ImGui::SameLine();
+                if(ImGui::Button("Clear")){measurePoints.clear();updateMeasurement();}
+                ImGui::SameLine();
+                if(ImGui::Button("Finish"))measureTool=false;
+                ImGui::TextWrapped("Drag vertices to adjust. Double-click or Enter to finish.");
+            }
             else if(spawnTool)ImGui::TextWrapped("Set spawn [P]: click the terrain to set the preset spawn.");
             else if(centerTool)ImGui::TextWrapped("Center camera [C]: click the terrain to set the orbit center.");
             else ImGui::TextWrapped("Navigate [Esc]: orbit, pan and zoom. Select a tool to edit its settings here.");
@@ -713,10 +1191,28 @@ int main(int argc,char** argv){
                     if(ImGui::Button("Exit walk mode [G]"))leaveWalk();
                 }
             }
-            biomeModMask=0;   /* shareable edition: FTF + vanilla Minecraft only, no biome-mod data is shipped */
+            if(sectionIconHeader("Vanilla structures (1.21.1)")){
+                warningBanner("WARNING: Vanilla structures (1.21.1)","Structure placement uses FTF surface biome and climate approximations on the preview grid and may not accurately match in-game locations.");
+                ImGui::Checkbox("Show structures on terrain",&showStructures);
+                ImGui::SameLine();ImGui::Checkbox("Labels",&structureLabels);
+                ImGui::Combo(labelAbove("Display").c_str(),&structureDisplayMode,"Icons\0Simplified 3D models\0Icons + 3D models\0");
+                if(ImGui::SmallButton("All"))for(auto& s:structureSets)s.enabled=true;
+                ImGui::SameLine();if(ImGui::SmallButton("None"))for(auto& s:structureSets)s.enabled=false;
+                ImGui::SameLine();ImGui::TextDisabled("(%zu found)",structurePins.size());
+                if(ImGui::BeginChild("StructureFilter",ImVec2(0,150),true)){
+                    for(size_t si=0;si<structureSets.size();++si){
+                        auto& s=structureSets[si];
+                        ImVec4 col(((s.colorRgb>>16)&255)/255.0f,((s.colorRgb>>8)&255)/255.0f,(s.colorRgb&255)/255.0f,1.0f);
+                        ImGui::ColorButton(("##sc"+std::to_string(si)).c_str(),col,ImGuiColorEditFlags_NoTooltip|ImGuiColorEditFlags_NoPicker,ImVec2(12,12));
+                        ImGui::SameLine();ImGui::Checkbox(s.name.c_str(),&s.enabled);
+                    }
+                    ImGui::EndChild();
+                }
+            }
             if(options.countBiomes>0)ImGui::SetNextItemOpen(true,ImGuiCond_Always);   // hidden count runs show the section (UI screenshot)
             if(sectionIconHeader("Biomes generated")){
                 if(options.countBiomes>0)ImGui::SetScrollHereY(0);
+                expWarning("Biome Counter / Locator","Experimental scan: fast GPU approximation on the active preview grid; very small or thin biomes can fall between samples unless higher sample counts are used.");
                 ImGui::TextWrapped("Which biomes appear in the preview world: %.0f x %.0f blocks around the preview centre (Preview world size).",params.domain.x,params.domain.x);
                 int censusQuality=censusGrid==512?0:censusGrid==1024?1:2;if(censusGrid<512||censusGrid>2048)ImGui::Text("Test scan grid: %d",censusGrid);else if(ImGui::Combo(labelAbove("Scan samples").c_str(),&censusQuality,"512\0" "1024\0" "2048\0"))censusGrid=512<<censusQuality;
                 ImGui::TextDisabled("One sample every %.0f blocks",params.domain.x/float(std::max(1,censusGrid-1)));
@@ -734,7 +1230,7 @@ int main(int argc,char** argv){
                     if(!census->unexpected.empty()){std::string list;for(auto& name:census->unexpected)list+=(list.empty()?"":", ")+name;ImGui::TextWrapped("Also found outside the tables: %s",list.c_str());}
                 }
                 ImGui::PushStyleColor(ImGuiCol_Text,ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-                ImGui::TextWrapped("Biome selection follows Minecraft's climate tree on FTF's climate. Very small biomes can fall between samples: use more samples to catch them.");
+                ImGui::TextWrapped("Vanilla biome selection follows Minecraft's climate tree on FTF's climate; Regions Unexplored replacements are approximate. Very small biomes can fall between samples: use more samples to catch them.");
                 ImGui::PopStyleColor();
             }
             sectionBar("Generator");
@@ -742,7 +1238,7 @@ int main(int argc,char** argv){
             ImGui::SetNextItemWidth(-1);
             if(ImGui::Combo("##Generator",&generator,"Validation landscape\0FTF terrain - isolated\0FTF region map - diagnostic\0FTF land mix (partial)\0FTF surface (all continents)\0FTF continent map - diagnostic\0")){params.meta.z=generator==0?0:generator+1;layer=0;topDown=params.meta.z==3||params.meta.z==6;if(params.meta.z==3)params.detail.x=2098;if(params.meta.z>=4&&!editor.document.loaded()){params.meta.z=2;status="Import an FTF preset to use land/surface views.";}changed=true;}
             if(params.meta.z==2){int profile=static_cast<int>(params.meta.w);if(ImGui::Combo(labelAbove("Terrain family").c_str(),&profile,"Plains\0Steppe\0Dales\0Hills 1\0Hills 2\0Plateau\0Badlands\0Torridonian\0")){params.meta.w=profile;changed=true;}}
-            if((params.meta.z==5||params.meta.z==6)&&editor.document.data.value("world",PresetJson::object()).value("continent",PresetJson::object()).value("continentType",std::string())=="SINGLE"){
+            if((params.meta.z==5||params.meta.z==6)&&editor.document.loaded()&&editor.document.data.value("world",PresetJson::object()).value("continent",PresetJson::object()).value("continentType",std::string())=="SINGLE"){
                 ImGui::TextWrapped("Single continent surrounds the world origin.");if(ImGui::Button("View near world origin")){params.domain.y=params.domain.z=0;changed=true;}
             }
             if(sectionIconHeader("Resolution and performance",ImGuiTreeNodeFlags_DefaultOpen)){
@@ -777,42 +1273,464 @@ int main(int argc,char** argv){
                 if(!highestStatus.empty())ImGui::TextWrapped("%s",highestStatus.c_str());
             }
             if(sectionIconHeader("View and scene",ImGuiTreeNodeFlags_DefaultOpen)){
-                ImGui::Checkbox("Top down",&topDown);ImGui::Checkbox("Lighting",&lighting);
+                ImGui::SeparatorText("Camera & Display");
+                ImGui::Checkbox("Top down",&topDown);ImGui::SameLine();ImGui::Checkbox("Lighting",&lighting);
+                if(ImGui::Checkbox("Temporal anti-aliasing (TAA)",&taaEnabled))taaHistoryValid=false;
+                ImGui::BeginDisabled(!taaEnabled);valueSlider("TAA sharpness",taaSharpness,0.0f,1.0f,"%.2f");ImGui::EndDisabled();
                 valueSlider("Vertical field of view (orbit, fly and walk)",cameraFov,20,120,"%.0f\xC2\xB0");
-                ImGui::SeparatorText("Culling");ImGui::Checkbox("Terrain frustum culling",&frustumCulling);ImGui::Checkbox("Terrain distance culling",&distanceCulling);if(distanceCulling)numberControl("Maximum draw distance",cullDistance,100,1000000,"%.0f blocks");ImGui::Checkbox("Terrain backface culling",&backfaceCulling);ImGui::TextWrapped("Culling changes rendering only. Distance culling can hide distant terrain.");
-                ImGui::Checkbox("Terrain ambient occlusion",&ambientOcclusion);
-                if(ImGui::IsItemHovered())ImGui::SetTooltip("Heightfield horizon occlusion: adds depth to valleys and crevices. Display only.");
-                ImGui::BeginDisabled(!ambientOcclusion);valueSlider("Ambient occlusion intensity",aoIntensity,0,2);ImGui::EndDisabled();
-                ImGui::BeginDisabled(atmo.clouds);bool shownShadows=cloudShadows&&!atmo.clouds;if(ImGui::Checkbox("Cloud shadows",&shownShadows))cloudShadows=shownShadows;ImGui::EndDisabled();if(atmo.clouds&&cloudShadows)ImGui::TextDisabled("(returns when clouds are off)");
-                if(ImGui::IsItemHovered())ImGui::SetTooltip("Soft procedural cloud shadows drift over the terrain. Display only.");
-                ImGui::BeginDisabled(!cloudShadows);
-                valueSlider("Cloud shadow intensity",shadowIntensity,0,1);
-                valueSlider("Cloud shadow speed",shadowSpeed,0,4,"%.2fx");ImGui::EndDisabled();
-                ImGui::SeparatorText("Atmosphere (display only)");
+                numberControl("Display vertical scale",exaggeration,.2f,3,"%.2fx");
+                ImGui::BeginDisabled(params.meta.z==3||params.meta.z==6||params.meta.z==1);ImGui::Checkbox("Show ocean floor",&showOceanFloor);ImGui::EndDisabled();
+                if(ImGui::IsItemHovered())ImGui::SetTooltip("Draw seabed heights instead of flattening underwater geometry to sea level. This is a display option; the FTF preset and generated heights stay unchanged.");
+                if(ImGui::Button("Reset camera [R]"))resetCamera();if(ImGui::IsItemHovered())ImGui::SetTooltip("Back to the default orbit view");
+
+                ImGui::SeparatorText("Scene Origin & File");
+                changed|=numberControl("Origin X",params.domain.y,-10000,10000,"%.9g");changed|=numberControl("Origin Z",params.domain.z,-10000,10000,"%.9g");
+                ImGui::BeginDisabled(editor.document.loaded());
+                if(ImGui::Button("Save scene")){try{saveSettings(params,worldSeed);status="Saved to state/scene.json";}catch(const std::exception& e){status=e.what();}}
+                ImGui::SameLine();if(ImGui::Button("Load scene")){try{params=loadSettings(worldSeed);changed=true;status="Scene loaded";}catch(const std::exception& e){status=e.what();}}
+                ImGui::EndDisabled();
+
+                ImGui::SeparatorText("Atmosphere & Water (display only)");
                 ImGui::Checkbox("Realistic water",&atmo.water);if(ImGui::IsItemHovered())ImGui::SetTooltip("Animated ripples, sky reflection with Fresnel, sun glint, and depth absorption on the sea. Display only; off by default.");
                 if(atmo.water){valueSlider("Ripple strength",atmo.ripple,0,2);valueSlider("Reflection strength",atmo.reflection,0,1.5f);}
                 ImGui::Checkbox("Volumetric fog",&atmo.fog);if(ImGui::IsItemHovered())ImGui::SetTooltip("Height fog thickest in valleys and over the sea, tinted by the sky and sun. Display only; off by default.");
                 if(atmo.fog){valueSlider("Fog density",atmo.fogDensity,0,4);valueSlider("Fog height falloff",atmo.fogFalloff,0,4);valueSlider("Fog opacity",atmo.fogOpacity,0,1);valueSlider("Fog base height",atmo.fogHeight,-100,600,"%.0f blocks");}
                 ImGui::Checkbox("Clouds",&atmo.clouds);if(ImGui::IsItemHovered())ImGui::SetTooltip("A flat layer of drifting 2D clouds at the cloud height, seen from below or above. Display only; off by default.");
                 if(atmo.clouds){valueSlider("Cloud opacity",atmo.cloudOpacity,0,1);valueSlider("Cloud coverage",atmo.cloudCoverage,0,1);valueSlider("Cloud density",atmo.cloudDensity,0,3);valueSlider("Cloud height",atmo.cloudBase,0,2000,"%.0f blocks");valueSlider("Cloud size",atmo.cloudScale,200,6000,"%.0f blocks");valueSlider("Wind speed",atmo.cloudSpeed,0,100,"%.0f blocks/s");}
-                ImGui::SeparatorText("Sun lighting");
+                ImGui::BeginDisabled(atmo.clouds);bool shownShadows=cloudShadows&&!atmo.clouds;if(ImGui::Checkbox("Cloud shadows",&shownShadows))cloudShadows=shownShadows;ImGui::EndDisabled();if(atmo.clouds&&cloudShadows)ImGui::TextDisabled("(returns when clouds are off)");
+                if(ImGui::IsItemHovered())ImGui::SetTooltip("Soft procedural cloud shadows drift over the terrain. Display only.");
+                ImGui::BeginDisabled(!cloudShadows);
+                valueSlider("Cloud shadow intensity",shadowIntensity,0,1);
+                valueSlider("Cloud shadow speed",shadowSpeed,0,4,"%.2fx");ImGui::EndDisabled();
+
+                ImGui::SeparatorText("Lighting & Shadows");
                 valueSlider("Sun azimuth",sunAzimuth,0,360,"%.0f\xC2\xB0");valueSlider("Sun elevation",sunElevation,2,89,"%.0f\xC2\xB0");valueSlider("Sun intensity",sunIntensity,0,3);
                 ImGui::Checkbox("Terrain casts sun shadows",&sunShadows);ImGui::BeginDisabled(!sunShadows);
                 valueSlider("Sun shadow intensity",sunShadowStrength,0,1);valueSlider("Sun shadow softness",sunShadowSoftness,0,1);valueSlider("Sun shadow reach",sunShadowRange,64,5000,"%.0f blocks");ImGui::EndDisabled();
-                ImGui::BeginDisabled(params.meta.z==3||params.meta.z==6||params.meta.z==1);ImGui::Checkbox("Show ocean floor",&showOceanFloor);ImGui::EndDisabled();
-                if(ImGui::IsItemHovered())ImGui::SetTooltip("Draw seabed heights instead of flattening underwater geometry to sea level. This is a display option; the FTF preset and generated heights stay unchanged.");
-                numberControl("Display vertical scale",exaggeration,.2f,3,"%.2fx");
-                changed|=numberControl("Origin X",params.domain.y,-10000,10000,"%.9g");changed|=numberControl("Origin Z",params.domain.z,-10000,10000,"%.9g");
-                if(ImGui::Button("Reset camera [R]"))resetCamera();if(ImGui::IsItemHovered())ImGui::SetTooltip("Back to the default orbit view");
-                ImGui::BeginDisabled(editor.document.loaded());
-                if(ImGui::Button("Save scene")){try{saveSettings(params,worldSeed);status="Saved to state/scene.json";}catch(const std::exception& e){status=e.what();}}
-                ImGui::SameLine();if(ImGui::Button("Load scene")){try{params=loadSettings(worldSeed);changed=true;status="Scene loaded";}catch(const std::exception& e){status=e.what();}}
-                ImGui::EndDisabled();
+                ImGui::Checkbox("Terrain ambient occlusion",&ambientOcclusion);
+                if(ImGui::IsItemHovered())ImGui::SetTooltip("Heightfield horizon occlusion: adds depth to valleys and crevices. Display only.");
+                ImGui::BeginDisabled(!ambientOcclusion);valueSlider("Ambient occlusion intensity",aoIntensity,0,2);ImGui::EndDisabled();
+
+                ImGui::SeparatorText("Culling (performance)");
+                ImGui::Checkbox("Terrain frustum culling",&frustumCulling);ImGui::Checkbox("Terrain distance culling",&distanceCulling);if(distanceCulling)numberControl("Maximum draw distance",cullDistance,100,1000000,"%.0f blocks");ImGui::Checkbox("Terrain backface culling",&backfaceCulling);ImGui::TextWrapped("Culling changes rendering only. Distance culling can hide distant terrain.");
+            }
+            ImGui::EndTabItem();
+            }
+            if(ImGui::BeginTabItem("Mod & Biome Support",nullptr,restoredRightTab==1?ImGuiTabItemFlags_SetSelected:0)){
+                activeRightTab=1;
+                auto tip=[](const char* text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))ImGui::SetTooltip("%s",text);};
+                biomeModMask=sanitizeBiomeModMask(biomeModMask);
+                if(sectionIconHeader("Supported biome mods",ImGuiTreeNodeFlags_DefaultOpen)){
+                    bool ruOn=(biomeModMask&(1u<<2))!=0;
+                    if(ImGui::Checkbox("Regions Unexplored 0.6.3 (MIT)",&ruOn))biomeModMask=ruOn?(biomeModMask|(1u<<2)):(biomeModMask&~(1u<<2));
+                    ImGui::TextDisabled("Minecraft 1.21.1 open-licence biome pack support.");
+                    ImGui::TextWrapped("Regions Unexplored biome replacements, approximate surface rules and block colours (MIT licence).");
+                }
+                if(sectionIconHeader("Biome mod configs (1.21.1)",ImGuiTreeNodeFlags_DefaultOpen)){
+                    auto exportToml=[&](const wchar_t* defFile,const std::string& content,const char* label){
+                        std::array<wchar_t,32768> fp{};
+                        std::filesystem::path init=appRoot/"exports";std::filesystem::create_directories(init);
+                        std::wstring defName(defFile);std::copy(defName.begin(),defName.end(),fp.begin());
+                        OPENFILENAMEW dlg{};dlg.lStructSize=sizeof(dlg);dlg.hwndOwner=glfwGetWin32Window(window);
+                        dlg.lpstrFile=fp.data();dlg.nMaxFile=static_cast<DWORD>(fp.size());
+                        dlg.lpstrFilter=L"TOML config (*.toml)\0*.toml\0";dlg.lpstrDefExt=L"toml";dlg.lpstrInitialDir=init.c_str();
+                        dlg.Flags=OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|OFN_OVERWRITEPROMPT;
+                        if(GetSaveFileNameW(&dlg)){
+                            try{std::ofstream out(std::filesystem::path(fp.data()));out<<content;biomeCfgStatus=std::string("Exported ")+label;}
+                            catch(const std::exception& e){biomeCfgStatus=e.what();}
+                        }
+                    };
+                    static const biomemodcfg::RegionsUnexploredConfig defRu{};
+                    auto resetSetting=[&](const char* id,auto& val,const auto& defVal,bool rightAlign=true){
+                        bool isDefault=(val==defVal);
+                        if(rightAlign){
+                            float rx=ImGui::GetWindowContentRegionMax().x-24.0f;
+                            ImGui::SameLine();
+                            if(ImGui::GetCursorPosX()<rx)ImGui::SetCursorPosX(rx);
+                        }else{
+                            ImGui::SameLine(0.0f,6.0f);
+                        }
+                        if(resetIconButton(id,isDefault))val=defVal;
+                    };
+                    if(ImGui::TreeNodeEx("Regions Unexplored",ImGuiTreeNodeFlags_DefaultOpen)){
+                        valueSliderReset("Region weight##ru",ruCfg.overworldRegionWeight,defRu.overworldRegionWeight,1,40,"ru_w","Region weight for Regions Unexplored primary overworld regions.","%d");
+                        ImGui::Checkbox("Enable custom regions##ru",&ruCfg.enableCustomRegions);
+                        tip("Register Regions Unexplored biome regions.");
+                        resetSetting("ru_c",ruCfg.enableCustomRegions,defRu.enableCustomRegions);
+                        ImGui::Checkbox("Enable surface rules##ru",&ruCfg.enableSurfaceRules);
+                        tip("Apply Regions Unexplored custom surface block rules (moss, chalk, silt, etc.).");
+                        resetSetting("ru_sr",ruCfg.enableSurfaceRules,defRu.enableSurfaceRules);
+                        ImGui::Checkbox("Vanilla replacements##ru",&ruCfg.toggleVanillaBiomeReplacements);
+                        tip("Allow Regions Unexplored to replace select vanilla biomes.");
+                        resetSetting("ru_vr",ruCfg.toggleVanillaBiomeReplacements,defRu.toggleVanillaBiomeReplacements);
+                        if(ImGui::Button("Export regions_unexplored-common.toml"))exportToml(L"regions_unexplored-common.toml",biomemodcfg::toToml(ruCfg),"regions_unexplored-common.toml");
+                        ImGui::SameLine();
+                        if(ImGui::Button("Reset##ru")){ruCfg=biomemodcfg::RegionsUnexploredConfig{};biomeCfgStatus="Reset Regions Unexplored config.";}
+                        ImGui::TreePop();
+                    }
+                    if(!biomeCfgStatus.empty())ImGui::TextWrapped("%s",biomeCfgStatus.c_str());
+                }
+                if(sectionIconHeader("Mod support",ImGuiTreeNodeFlags_DefaultOpen)){
+                    static const roadweaver::RoadWeaverConfig defRw{};
+                    auto resetRw=[&](const char* id,auto& val,const auto& defVal,bool inlineAfter=false){
+                        bool isDefault=(val==defVal);
+                        if(inlineAfter){
+                            ImGui::SameLine(0.0f,6.0f);
+                        }else{
+                            float rx=ImGui::GetWindowContentRegionMax().x-24.0f;
+                            ImGui::SameLine();
+                            if(ImGui::GetCursorPosX()<rx)ImGui::SetCursorPosX(rx);
+                        }
+                        if(resetIconButton(id,isDefault))val=defVal;
+                    };
+                    expWarning("RoadWeaver Support","Experimental preview: terrain-aware road layout and exports may vary from in-game chunk generation.");
+                    ImGui::Checkbox("RoadWeaver (1.21.1)",&rwConfig.enabled);
+                    tip("Generates terrain-aware road networks, bridges, tunnels, and roadside structures between settlements.");
+                    if(rwConfig.enabled){
+                        ImGui::Indent(10.0f);
+                        float comboW=std::max(80.0f,ImGui::GetContentRegionAvail().x-32.0f);
+                        auto rwSection=[&](const char* title,ImVec4 col){
+                            ImGui::Spacing();
+                            ImVec2 p=ImGui::GetCursorScreenPos();
+                            float w=ImGui::GetContentRegionAvail().x;
+                            float h=ImGui::GetTextLineHeight()+6.0f;
+                            ImU32 bg=ImGui::GetColorU32(ImVec4(col.x,col.y,col.z,0.14f));
+                            ImU32 bar=ImGui::GetColorU32(ImVec4(col.x,col.y,col.z,0.95f));
+                            ImGui::GetWindowDrawList()->AddRectFilled(p,ImVec2(p.x+w,p.y+h),bg,3.0f);
+                            ImGui::GetWindowDrawList()->AddRectFilled(p,ImVec2(p.x+3.5f,p.y+h),bar,2.0f);
+                            ImGui::SetCursorPosX(ImGui::GetCursorPosX()+8.0f);
+                            ImGui::SetCursorPosY(ImGui::GetCursorPosY()+3.0f);
+                            ImGui::PushStyleColor(ImGuiCol_Text,col);
+                            ImGui::TextUnformatted(title);
+                            ImGui::PopStyleColor();
+                            ImGui::Spacing();
+                        };
+                        rwSection("Display & Targets",ImVec4(0.96f,0.72f,0.25f,1.0f));
+                        ImGui::SetNextItemWidth(comboW);
+                        ImGui::Combo(labelAbove("Road display").c_str(),&rwConfig.displayMode,"Overlay / Icons\0Block representation\0Overlay + Blocks\0");
+                        tip("Switch between lightweight map lines/icons, 3D Minecraft block roads/bridges/lamps, or both.");
+                        resetRw("rw_disp",rwConfig.displayMode,defRw.displayMode,true);
+                        ImGui::TextDisabled("%zu roads  |  %zu bridge segs  |  %zu roadside props",rwNetwork.roads.size(),rwNetwork.bridgeSegments,rwNetwork.props.size());
+                        ImGui::Checkbox("Connect villages only",&rwConfig.connectVillagesOnly);
+                        tip("When enabled, roads connect only villages (default). Disable to pick which structure types RoadWeaver connects.");
+                        resetRw("rw_vo",rwConfig.connectVillagesOnly,defRw.connectVillagesOnly);
+                        if(!rwConfig.connectVillagesOnly){
+                            ImGui::TextUnformatted("RoadWeaver target structures");
+                            tip("Select which generated structure types RoadWeaver connects with roads.");
+                            if(ImGui::SmallButton("All##rwst"))rwConfig.targetStructureMask=0xFFFFFFFFu;
+                            ImGui::SameLine();if(ImGui::SmallButton("None##rwst"))rwConfig.targetStructureMask=0u;
+                            ImGui::SameLine();resetRw("rw_mask",rwConfig.targetStructureMask,defRw.targetStructureMask,true);
+                            if(ImGui::BeginChild("RwStructureSelect",ImVec2(0,120),true)){
+                                for(size_t si=0;si<structureSets.size()&&si<32;++si){
+                                    const auto& s=structureSets[si];
+                                    if(s.shortId=="mineshafts"||s.shortId=="strongholds"||s.shortId=="ancient_cities"||
+                                       s.shortId=="trial_chambers"||s.shortId=="buried_treasures"||s.shortId=="ocean_monuments"||
+                                       s.shortId=="ocean_ruins"||s.shortId=="shipwrecks")continue;
+                                    bool on=(rwConfig.targetStructureMask&(1u<<si))!=0;
+                                    ImVec4 col(((s.colorRgb>>16)&255)/255.0f,((s.colorRgb>>8)&255)/255.0f,(s.colorRgb&255)/255.0f,1.0f);
+                                    ImGui::ColorButton(("##rwsc"+std::to_string(si)).c_str(),col,ImGuiColorEditFlags_NoTooltip|ImGuiColorEditFlags_NoPicker,ImVec2(11,11));
+                                    ImGui::SameLine();
+                                    if(ImGui::Checkbox((s.name+"##rwst").c_str(),&on)){
+                                        if(on)rwConfig.targetStructureMask|=(1u<<si);
+                                        else rwConfig.targetStructureMask&=~(1u<<si);
+                                    }
+                                }
+                                ImGui::EndChild();
+                            }
+                        }
+                        rwSection("Network & Pathfinding",ImVec4(0.34f,0.78f,1.00f,1.0f));
+                        ImGui::SetNextItemWidth(comboW);
+                        ImGui::Combo(labelAbove("Network algorithm").c_str(),&rwConfig.networkAlgorithm,"KNN (sparse)\0Delaunay (dense web)\0RNG (balanced)\0MST (tree)\0");
+                        tip("Graph topology connecting settlements: KNN (nearest neighbors), Delaunay (dense), RNG (balanced), or MST (minimum spanning tree).");
+                        resetRw("rw_algo",rwConfig.networkAlgorithm,defRw.networkAlgorithm,true);
+                        ImGui::SetNextItemWidth(comboW);
+                        ImGui::Combo(labelAbove("Pathfinding").c_str(),&rwConfig.pathfindingMode,"A* (terrain-aware)\0Bidirectional A*\0Direct / Bezier\0");
+                        tip("How roads route around steep cliffs and water: A* / Bidirectional A* follow gentle slopes; Direct/Bezier draws smooth curves.");
+                        resetRw("rw_path",rwConfig.pathfindingMode,defRw.pathfindingMode,true);
+                        valueSliderReset("Search radius",rwConfig.searchRadius,defRw.searchRadius,512,16384,"rw_sr","Maximum distance between two settlements for RoadWeaver to link them with a road.","%d blocks");
+                        valueSliderReset("Max connections",rwConfig.maxConnections,defRw.maxConnections,1,6,"rw_mc","Maximum number of road links radiating from a single settlement.","%d");
+                        valueSliderReset("Path step size",rwConfig.roadStepSize,defRw.roadStepSize,12,64,"rw_st","Pathfinding sampling resolution in blocks. Smaller = more terrain detail.","%d blocks");
+                        valueSliderReset("Slope weight",rwConfig.slopeWeight,defRw.slopeWeight,0.5f,8.0f,"rw_sw","How strongly A* pathfinding avoids steep terrain slopes. Higher = flatter, windier roads.","%.1fx");
+                        valueSliderReset("Water weight",rwConfig.waterAvoidanceWeight,defRw.waterAvoidanceWeight,0.5f,10.0f,"rw_ww","Cost multiplier for routing across water before falling back to a bridge.","%.1fx");
+                        ImGui::Checkbox("Bezier smoothing",&rwConfig.bezierSmoothing);
+                        tip("Apply quadratic Bezier curve smoothing over A* waypoints for natural bends.");
+                        resetRw("rw_bz",rwConfig.bezierSmoothing,defRw.bezierSmoothing);
+                        rwSection("Road Geometry & Style",ImVec4(0.88f,0.56f,0.32f,1.0f));
+                        ImGui::SetNextItemWidth(comboW);
+                        ImGui::Combo(labelAbove("Road style").c_str(),&rwConfig.roadStyle,"Biome-adaptive (Natural)\0Stone Brick\0Cobble & Gravel\0Dirt Path\0");
+                        tip("Surface block palette used for roads in Block representation mode.");
+                        resetRw("rw_style",rwConfig.roadStyle,defRw.roadStyle,true);
+                        valueSliderReset("Road width",rwConfig.roadWidth,defRw.roadWidth,2,7,"rw_w","Width of generated roads and bridges in blocks.","%d blocks");
+                        valueSliderReset("Clear height",rwConfig.roadClearHeight,defRw.roadClearHeight,3,6,"rw_ch","Vertical air clearance carved above the road surface.","%d blocks");
+                        valueSliderReset("Weathering",rwConfig.weatheringChance,defRw.weatheringChance,0.0f,1.0f,"rw_wt","Probability (0.00-1.00) of mossy, cracked, or coarse block variation along roads.","%.2f");
+                        ImGui::Checkbox("Flatten terrain",&rwConfig.flattenTerrain);
+                        tip("Level terrain shoulders beside the road bed.");
+                        resetRw("rw_ft",rwConfig.flattenTerrain,defRw.flattenTerrain);
+                        rwSection("Bridges & Tunnels",ImVec4(0.30f,0.88f,0.72f,1.0f));
+                        ImGui::Checkbox("Generate bridges",&rwConfig.generateBridges);
+                        tip("Build wooden bridges with railings and support piers across water.");
+                        resetRw("rw_br",rwConfig.generateBridges,defRw.generateBridges);
+                        if(rwConfig.generateBridges){
+                            valueSliderReset("Bridge height",rwConfig.bridgeDeckHeight,defRw.bridgeDeckHeight,1,6,"rw_bdh","Bridge deck elevation above sea level.","%d blocks");
+                            valueSliderReset("Pier spacing",rwConfig.bridgePierInterval,defRw.bridgePierInterval,2,8,"rw_bpi","Spacing between stone support piers beneath bridges.","%d segs");
+                            ImGui::Checkbox("Bridge railings",&rwConfig.bridgeRailings);
+                            tip("Add wooden fence posts and side railings to bridges.");
+                            resetRw("rw_brl",rwConfig.bridgeRailings,defRw.bridgeRailings);
+                        }
+                        ImGui::Checkbox("Generate tunnels",&rwConfig.generateTunnels);
+                        tip("Carve tunnels through sharp terrain ridges.");
+                        resetRw("rw_tn",rwConfig.generateTunnels,defRw.generateTunnels);
+                        if(rwConfig.generateTunnels){
+                            valueSliderReset("Tunnel ridge depth",rwConfig.tunnelMinRidgeDepth,defRw.tunnelMinRidgeDepth,6,24,"rw_tmd","Minimum ridge height above neighbors required to trigger a tunnel.","%d blocks");
+                        }
+                        rwSection("Roadside Props & Export",ImVec4(0.72f,0.55f,1.00f,1.0f));
+                        ImGui::Checkbox("Roadside lamps",&rwConfig.roadsideLamps);
+                        tip("Place lantern posts along roads at regular intervals.");
+                        resetRw("rw_lp",rwConfig.roadsideLamps,defRw.roadsideLamps);
+                        if(rwConfig.roadsideLamps){
+                            valueSliderReset("Lamp interval",rwConfig.lampInterval,defRw.lampInterval,24,120,"rw_li","Distance between roadside lantern posts.","%d blocks");
+                        }
+                        ImGui::Checkbox("Roadside signposts",&rwConfig.roadsideSignposts);
+                        tip("Place wooden signposts near settlement entrances.");
+                        resetRw("rw_sp",rwConfig.roadsideSignposts,defRw.roadsideSignposts);
+                        ImGui::Checkbox("Roadside camps/inns",&rwConfig.roadsideDecorations);
+                        tip("Spawn small roadside camps and rest shelters along long routes.");
+                        resetRw("rw_dc",rwConfig.roadsideDecorations,defRw.roadsideDecorations);
+                        if(rwConfig.roadsideDecorations){
+                            valueSliderReset("Camp interval",rwConfig.decorationInterval,defRw.decorationInterval,64,300,"rw_di","Distance between roadside camps/waystations.","%d blocks");
+                        }
+                        if(ImGui::Button("Export RoadWeaver config")){
+                            std::array<wchar_t,32768> fp{};
+                            std::filesystem::path init=appRoot/"exports";std::filesystem::create_directories(init);
+                            std::wstring defName=L"roadweaver-config.json";std::copy(defName.begin(),defName.end(),fp.begin());
+                            OPENFILENAMEW dlg{};dlg.lStructSize=sizeof(dlg);dlg.hwndOwner=glfwGetWin32Window(window);
+                            dlg.lpstrFile=fp.data();dlg.nMaxFile=static_cast<DWORD>(fp.size());
+                            dlg.lpstrFilter=L"RoadWeaver config (*.json)\0*.json\0";dlg.lpstrDefExt=L"json";dlg.lpstrInitialDir=init.c_str();
+                            dlg.Flags=OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|OFN_OVERWRITEPROMPT;
+                            if(GetSaveFileNameW(&dlg)){
+                                try{std::ofstream out(std::filesystem::path(fp.data()));out<<roadweaver::toConfigJson(rwConfig).dump(2)<<"\n";rwExportStatus="Exported RoadWeaver config.";}
+                                catch(const std::exception& e){rwExportStatus=e.what();}
+                            }
+                        }
+                        ImGui::SameLine();
+                        if(ImGui::Button("Reset##rw")){bool wasEn=rwConfig.enabled;rwConfig=roadweaver::RoadWeaverConfig{};rwConfig.enabled=wasEn;rwExportStatus="Reset RoadWeaver config.";}
+                        if(!rwExportStatus.empty())ImGui::TextWrapped("%s",rwExportStatus.c_str());
+                        ImGui::Unindent(10.0f);
+                    }
+                    ImGui::Separator();
+                    expWarning("Dynamic Waters Support","Experimental integration: hydrology carving runs asynchronously on CPU inside the preview radius; Flow/Client options export to TOML only.");
+                    ImGui::Checkbox("Dynamic Waters 13.1.1 (1.21.1)",&dwCfg.enabled);
+                    tip("Block-accurate hydrology, carved channels, stepped mountain rivers, watershed lakes, boulders, shore palettes, ice rules, and water plants (v13.1.1).");
+                    if(dwCfg.enabled){
+                        ImGui::Indent(10.0f);
+                        static const dw::DynamicWatersConfig defDw{};
+                        dw::DynamicWatersConfig defWithEnabled=defDw;defWithEnabled.enabled=dwCfg.enabled;
+                        const bool dwModified=(dwCfg!=defWithEnabled);
+                        if(!dwModified)ImGui::BeginDisabled(true);
+                        if(ImGui::Button("Reset all settings to mod defaults##dw_top",ImVec2(-1.0f,0.0f))){
+                            dwCfg=dw::DynamicWatersConfig{};
+                            dwCfg.enabled=true;
+                            dwExportStatus="Reset all Dynamic Waters settings to mod defaults (preview radius & pin kept).";
+                        }
+                        if(!dwModified)ImGui::EndDisabled();
+                        tip("Restore every Dynamic Waters mod setting in this panel to its exact mod default (v13.1.1).\nKeeps Dynamic Waters enabled and preserves your software-only Preview radius & pinned center.");
+                        float dwComboW=std::max(80.0f,ImGui::GetContentRegionAvail().x-32.0f);
+                        auto dwSection=[&](const char* title,ImVec4 col){
+                            ImGui::Spacing();
+                            ImVec2 p=ImGui::GetCursorScreenPos();
+                            float w=ImGui::GetContentRegionAvail().x;
+                            float h=ImGui::GetTextLineHeight()+6.0f;
+                            ImU32 bg=ImGui::GetColorU32(ImVec4(col.x,col.y,col.z,0.14f));
+                            ImU32 bar=ImGui::GetColorU32(ImVec4(col.x,col.y,col.z,0.95f));
+                            ImGui::GetWindowDrawList()->AddRectFilled(p,ImVec2(p.x+w,p.y+h),bg,3.0f);
+                            ImGui::GetWindowDrawList()->AddRectFilled(p,ImVec2(p.x+3.5f,p.y+h),bar,2.0f);
+                            ImGui::SetCursorPosX(ImGui::GetCursorPosX()+8.0f);
+                            ImGui::SetCursorPosY(ImGui::GetCursorPosY()+3.0f);
+                            ImGui::PushStyleColor(ImGuiCol_Text,col);
+                            ImGui::TextUnformatted(title);
+                            ImGui::PopStyleColor();
+                            ImGui::SetCursorPosY(ImGui::GetCursorPosY()+2.0f);
+                        };
+                        dwSection("Software Preview Area (Not Exported)",ImVec4(0.32f,0.85f,0.82f,1.0f));
+                        valueSliderReset("Preview radius (blocks)##dw_preview",dwPreviewRadius,4096,1024,16384,"dw_prad","Software-only circular preview radius around the active Dynamic Waters center point. Never exported to dynamicwaters-common.toml or presets.","%d");
+                        if(ImGui::Button(dwTool?"Cancel center pick [U]":"Pick center point [U]")){
+                            dwTool=!dwTool;
+                            if(dwTool){detailTool=centerTool=spawnTool=measureTool=pointTool=copyTool=walkPickTool=false;}
+                        }
+                        tip("Click anywhere on the terrain in the viewport to pin the Dynamic Waters preview center point.");
+                        if(dwPinSet){
+                            ImGui::SameLine();
+                            if(ImGui::SmallButton("Clear / Follow focus##dw_clear"))dwPinSet=false;
+                            tip("Unpin the Dynamic Waters center so it follows your active detail focus or world spawn.");
+                            ImGui::Text("Center: %.0f, %.0f (pinned, r=%d)",dwPinPos.x,dwPinPos.y,dwPreviewRadius);
+                        }else{
+                            const glm::vec2 autoFocus=detailPlaced?detailCenter:glm::vec2(params.domain.y,params.domain.z);
+                            ImGui::TextDisabled("Center: %.0f, %.0f (auto focus, r=%d)",autoFocus.x,autoFocus.y,dwPreviewRadius);
+                        }
+                        dwSection("Lowland & Main Rivers",ImVec4(0.35f,0.78f,0.96f,1.0f));
+                        {int m=int(dwCfg.normalRiverMode);ImGui::SetNextItemWidth(dwComboW);if(ImGui::Combo("Normal river mode##dw",&m,"DYNAMIC\0VANILLA\0NONE\0"))dwCfg.normalRiverMode=static_cast<dw::NormalRiverMode>(m);}
+                        tip("Which long lowland rivers a world gets (takes effect on world load):\nDYNAMIC = Dynamic Waters' wide channels with canyons and tunnels (default).\nVANILLA = Minecraft's own unmodded lowland rivers.\nNONE = No lowland rivers at all (mountain rivers are unaffected).");
+                        resetRw("dw_nrm",dwCfg.normalRiverMode,defDw.normalRiverMode);
+                        {int d=int(dwCfg.normalRiverDensity);ImGui::SetNextItemWidth(dwComboW);if(ImGui::Combo("Normal river density##dw",&d,"VERY_LOW\0LOW\0MEDIUM\0HIGH\0ULTRA\0EXTREME\0INSANE\0"))dwCfg.normalRiverDensity=static_cast<dw::DensityLevel>(d);}
+                        tip("How many lowland rivers a world gets, against the default (HIGH):\nVERY_LOW ~1/9, LOW ~4/9, MEDIUM ~2/3, ULTRA ~1.8x, EXTREME ~2.8x, INSANE ~7x.");
+                        resetRw("dw_nrd",dwCfg.normalRiverDensity,defDw.normalRiverDensity);
+                        valueSliderReset("Canyon height##dw",dwCfg.normalRiverCanyonHeight,defDw.normalRiverCanyonHeight,64.0,256.0,"dw_ch","Terrain height (Y level) above which a lowland river runs as a closed\ntunnel under the ground instead of an open canyon. Higher = more open\ncanyons, fewer tunnels (requires Normal river tunnels). Default: 105","%.0f");
+                        if(!dwCfg.normalRiverTunnels){ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0.86f,0.72f,0.36f,0.92f));ImGui::TextWrapped("  (Inactive while 'Normal river tunnels' below is Off)");ImGui::PopStyleColor();}
+                        valueSliderReset("Delta inland reach##dw",dwCfg.deltaInlandReach,defDw.deltaInlandReach,0,512,"dw_dir","How far inland a big lowland river's delta may begin, in blocks from the coast.\nLower = deltas nearer the coast. 0 = no deltas; <90 counts as 90.\nNew chunks only. Default: 256","%d");
+                        {int sp=int(dwCfg.riverSplits);ImGui::SetNextItemWidth(dwComboW);if(ImGui::Combo("River splits##dw",&sp,"OFF\0RARE\0ENOUGH\0NORMAL\0OFTEN\0"))dwCfg.riverSplits=static_cast<dw::RiverSplits>(sp);}
+                        tip("How often a lowland river divides for a stretch into two or three arms\naround low islands before rejoining. New chunks only. Default: ENOUGH");
+                        resetRw("dw_rs",dwCfg.riverSplits,defDw.riverSplits);
+                        {int lg=int(dwCfg.riverFallenLogs);ImGui::SetNextItemWidth(dwComboW);if(ImGui::Combo("Fallen logs##dw",&lg,"OFF\0RARE\0NORMAL\0OFTEN\0"))dwCfg.riverFallenLogs=static_cast<dw::FallenLogs>(lg);}
+                        tip("How often a fallen trunk lies over the water between a river's islands.\nRequires River splits on and Normal river tunnels off. New chunks only. Default: NORMAL");
+                        resetRw("dw_fl",dwCfg.riverFallenLogs,defDw.riverFallenLogs);
+                        ImGui::Checkbox("Normal river tunnels##dw",&dwCfg.normalRiverTunnels);
+                        tip("Let lowland rivers run under high ground as closed tunnels above Canyon height.\nOff = cut an open terraced gorge instead. New chunks only. Default: Off");
+                        resetRw("dw_nrt",dwCfg.normalRiverTunnels,defDw.normalRiverTunnels);
+                        if(dwCfg.normalRiverTunnels){
+                            valueSliderReset("Normal tunnel height##dw",dwCfg.normalTunnelHeight,defDw.normalTunnelHeight,4,32,"dw_nth","Height of a lowland tunnel's roof over the water at its middle, in blocks,\ngive or take a few. New chunks only. Default: 16","%d");
+                            valueSliderReset("Normal tunnel ledge##dw",dwCfg.normalTunnelLedge,defDw.normalTunnelLedge,0,16,"dw_ntl","Width of a dry ledge along each side of the water, in blocks.\n0 = water reaches the walls. New chunks only. Default: 0","%d");
+                            ImGui::Checkbox("Tunnel pillars##dw",&dwCfg.normalTunnelPillars);
+                            tip("Rare single pillars of rock standing in a lowland tunnel. New chunks only. Default: On");
+                            resetRw("dw_ntp",dwCfg.normalTunnelPillars,defDw.normalTunnelPillars);
+                            ImGui::Checkbox("Tunnel formations##dw",&dwCfg.normalTunnelFormations);
+                            tip("Rock rising from the bed and hanging from the roof, as in a cave. New chunks only. Default: On");
+                            resetRw("dw_ntf",dwCfg.normalTunnelFormations,defDw.normalTunnelFormations);
+                        }
+
+                        dwSection("Mountain Rivers, Watersheds & Ice",ImVec4(0.45f,0.88f,0.74f,1.0f));
+                        ImGui::Checkbox("Enable watersheds##dw",&dwCfg.enableWatersheds);
+                        tip("Generate mountain rivers following the terrain's own drainage from mountains.\nOff = faster world generation. Default: On");
+                        resetRw("dw_ws",dwCfg.enableWatersheds,defDw.enableWatersheds);
+                        {int md=int(dwCfg.mountainRiverDensity);ImGui::SetNextItemWidth(dwComboW);if(ImGui::Combo("Mountain river density##dw",&md,"VERY_LOW\0LOW\0MEDIUM\0HIGH\0ULTRA\0EXTREME\0INSANE\0"))dwCfg.mountainRiverDensity=static_cast<dw::DensityLevel>(md);}
+                        tip("How many mountain rivers a world gets. Each step down roughly halves streams.\nVERY_LOW = largest valleys only; HIGH = default; INSANE = dense stream network.");
+                        resetRw("dw_mrd",dwCfg.mountainRiverDensity,defDw.mountainRiverDensity);
+                        {int wf=int(dwCfg.mountainRiverWaterfalls);ImGui::SetNextItemWidth(dwComboW);if(ImGui::Combo("Mountain waterfalls##dw",&wf,"CLIFFS\0FEW\0NORMAL\0MANY\0"))dwCfg.mountainRiverWaterfalls=static_cast<dw::WaterfallLevel>(wf);}
+                        tip("How often a steep mountain stream breaks into a flat pool and vertical waterfall.\nCLIFFS = ground drops only; FEW = every 50-90 blocks; NORMAL = 20-40 (default); MANY = every few.");
+                        resetRw("dw_mwf",dwCfg.mountainRiverWaterfalls,defDw.mountainRiverWaterfalls);
+                        {int ic=int(dwCfg.mountainRiverIce);ImGui::SetNextItemWidth(dwComboW);if(ImGui::Combo("Mountain river ice##dw",&ic,"OPEN\0CALM\0FULL\0"))dwCfg.mountainRiverIce=static_cast<dw::MountainRiverIce>(ic);}
+                        tip("How mountain rivers freeze in cold land. OPEN = none freezes;\nCALM = calm stretches freeze, rapids/waterfalls stay open (default);\nFULL = rapids and waterfalls freeze too. Lakes/sea/frozen rivers freeze anyway.");
+                        resetRw("dw_mri",dwCfg.mountainRiverIce,defDw.mountainRiverIce);
+                        {int ifl=int(dwCfg.riverIceFloes);ImGui::SetNextItemWidth(dwComboW);if(ImGui::Combo("River ice floes##dw",&ifl,"OFF\0RARE\0NORMAL\0OFTEN\0MANY\0"))dwCfg.riverIceFloes=static_cast<dw::IceFloes>(ifl);}
+                        tip("How often thin ice floes float down open mountain rivers in cold land\nbefore cracking apart. OFF = never, NORMAL = every few seconds (default).");
+                        resetRw("dw_rif",dwCfg.riverIceFloes,defDw.riverIceFloes);
+                        ImGui::Checkbox("Mountain river tunnels##dw",&dwCfg.mountainRiverTunnels);
+                        tip("Let mountain rivers cut underground through hillsides and slope down via tunnels\ninto deep lowland rivers instead of vertical shafts. New chunks only. Default: Off");
+                        resetRw("dw_mrt",dwCfg.mountainRiverTunnels,defDw.mountainRiverTunnels);
+                        if(dwCfg.mountainRiverTunnels){
+                            {int tf=int(dwCfg.mountainTunnelFrequency);ImGui::SetNextItemWidth(dwComboW);if(ImGui::Combo("Mountain tunnel freq##dw",&tf,"RARE\0NORMAL\0OFTEN\0"))dwCfg.mountainTunnelFrequency=static_cast<dw::TunnelFrequency>(tf);}
+                            tip("How often a mountain river goes into a hillside on slopes with room for a tunnel.\nOFTEN = wherever ground has room. New chunks only. Default: NORMAL");
+                            resetRw("dw_mtf",dwCfg.mountainTunnelFrequency,defDw.mountainTunnelFrequency);
+                            valueSliderReset("Mountain tunnel length##dw",dwCfg.mountainTunnelLength,defDw.mountainTunnelLength,32,512,"dw_mtl","Longest a mountain river runs level through rock, in blocks, before its entry.\nEnds sooner where ground allows. New chunks only. Default: 256","%d");
+                            valueSliderReset("Mountain tunnel depth##dw",dwCfg.mountainTunnelDepth,defDw.mountainTunnelDepth,8,64,"dw_mtd","How far under its old level a mountain river drops in a tunnel, in blocks.\nDeeper = more rock overhead and longer tunnels on steep ground. Default: 32","%d");
+                            valueSliderReset("Mountain tunnel height##dw",dwCfg.mountainTunnelHeight,defDw.mountainTunnelHeight,4,32,"dw_mth","Height of a mountain tunnel's roof over the water, in blocks.\nWider rivers carve taller tunnels. New chunks only. Default: 8","%d");
+                            valueSliderReset("Mountain tunnel ledge##dw",dwCfg.mountainTunnelLedge,defDw.mountainTunnelLedge,0,16,"dw_mtl2","Width of the dry ledge along each side of the water, in blocks.\nNew chunks only. Default: 3","%d");
+                        }
+
+                        dwSection("Biomes, Shores & Features",ImVec4(0.84f,0.74f,0.42f,1.0f));
+                        ImGui::Checkbox("Mountain river biome##dw",&dwCfg.mountainRiverBiome);
+                        tip("Give the middle of a mountain river the river biome (frozen river in cold land).\nBanks, beds and plants keep surrounding land biomes. Only with DYNAMIC lowland rivers. Default: On");
+                        resetRw("dw_mrb",dwCfg.mountainRiverBiome,defDw.mountainRiverBiome);
+                        ImGui::Checkbox("Mountain lakes##dw",&dwCfg.enableMountainLakes);
+                        tip("Fill natural terrain depressions in the mountains with lakes,\nat whatever height the basin sits. Default: On");
+                        resetRw("dw_mlk",dwCfg.enableMountainLakes,defDw.enableMountainLakes);
+                        ImGui::Checkbox("River boulders##dw",&dwCfg.riverBoulders);
+                        tip("Rounded boulders in lowland rivers and shallows, plus occasional rocks\nin mountain stream rapids. New chunks only. Default: On");
+                        resetRw("dw_rbd",dwCfg.riverBoulders,defDw.riverBoulders);
+                        ImGui::Checkbox("Riverbank palettes##dw",&dwCfg.riverbankPalettes);
+                        tip("Lay current-sorted bed blocks (gravel/cobble in rapids; sand/clay/silt in pools),\nshores and bars per biome. New chunks only. Default: On");
+                        resetRw("dw_rbp",dwCfg.riverbankPalettes,defDw.riverbankPalettes);
+                        ImGui::Checkbox("Water plants##dw",&dwCfg.waterPlants);
+                        tip("Plants in and along rivers and lakes (kelp, seagrass, lily pads, reeds,\nsea pickles) by biome. Off = none. New chunks only. Default: On");
+                        resetRw("dw_wp",dwCfg.waterPlants,defDw.waterPlants);
+                        {char blBuf[512]{};std::strncpy(blBuf,dwCfg.biomeBlacklistText.c_str(),sizeof(blBuf)-1);
+                         ImGui::SetNextItemWidth(dwComboW);if(ImGui::InputText("Biome blacklist##dw",blBuf,sizeof(blBuf)))dwCfg.biomeBlacklistText=blBuf;}
+                        tip("Biomes treated like oceans (no river flow or carving).\nComma-separated biome IDs or wildcard prefixes (e.g. minecraft:warm_ocean, modid:*).");
+                        resetRw("dw_bl",dwCfg.biomeBlacklistText,defDw.biomeBlacklistText);
+
+                        if(ImGui::TreeNode("Flow Speeds, Visuals & Client (dynamicwaters-common.toml)")){
+                            auto dblSlider=[&](const char* lbl,double& v,double mn,double mx,const char* rstId,const double& defV,const char* tipText){
+                                valueSliderReset(lbl,v,defV,mn,mx,rstId,tipText,"%.2f");
+                            };
+                            dblSlider("Player speed##dw",dwCfg.playerSpeed,0.0,2.0,"dw_ps",defDw.playerSpeed,"RiverFlow speed multiplier for players in the river. Default: 0.2");
+                            dblSlider("Animal speed##dw",dwCfg.animalSpeed,0.0,2.0,"dw_as",defDw.animalSpeed,"RiverFlow speed multiplier for animals.\nAnimals have strong swimming AI, so lower values often feel better. Default: 0.1");
+                            dblSlider("Water mob speed##dw",dwCfg.waterMobSpeed,0.0,2.0,"dw_wms",defDw.waterMobSpeed,"RiverFlow speed multiplier for water mobs (squids, fish, dolphins).\nSet to 0 so they are not swept away when AI pauses. Default: 0.0");
+                            dblSlider("Item speed##dw",dwCfg.itemSpeed,0.0,2.0,"dw_is",defDw.itemSpeed,"RiverFlow speed multiplier for dropped items. Default: 0.2");
+                            dblSlider("Default speed##dw",dwCfg.defaultSpeed,0.0,2.0,"dw_ds",defDw.defaultSpeed,"RiverFlow speed multiplier for generic unidentified entities. Default: 0.1");
+                            dblSlider("Sable ship speed##dw",dwCfg.sableShipSpeed,0.0,5.0,"dw_ss",defDw.sableShipSpeed,"RiverFlow speed multiplier for physics ships (Sable / Aeronautics, Valkyrien Skies). Default: 2.0");
+                            dblSlider("Rain flow boost##dw",dwCfg.rainFlowBoost,0.0,2.0,"dw_rfb",defDw.rainFlowBoost,"Flat speed boost applied to river flow when it is raining. Default: 0.5");
+                            dblSlider("Thunder flow boost##dw",dwCfg.thunderstormFlowBoost,0.0,2.0,"dw_tfb",defDw.thunderstormFlowBoost,"Flat speed boost applied to river flow during a thunderstorm. Default: 0.7");
+                            ImGui::Checkbox("Vanilla river flow##dw",&dwCfg.vanillaRiverFlow);tip("Give Minecraft's own rivers a current toward the sea when Normal river mode is VANILLA.\nDefault: On");resetRw("dw_vrf",dwCfg.vanillaRiverFlow,defDw.vanillaRiverFlow);
+                            {char cesBuf[512]{};std::strncpy(cesBuf,dwCfg.customEntitySpeedsText.c_str(),sizeof(cesBuf)-1);
+                             ImGui::SetNextItemWidth(dwComboW);if(ImGui::InputText("Custom entity speeds##dw",cesBuf,sizeof(cesBuf)))dwCfg.customEntitySpeedsText=cesBuf;}
+                            tip("Custom per-entity speed overrides (comma-separated 'entity_id=multiplier').\nIn-game / TOML export only. Default: minecraft:warden=1.0");
+                            resetRw("dw_ces",dwCfg.customEntitySpeedsText,defDw.customEntitySpeedsText);
+                            ImGui::Checkbox("River particles##dw",&dwCfg.enableRiverParticles);tip("Enable custom bubble particles in rivers. Default: On");resetRw("dw_erp",dwCfg.enableRiverParticles,defDw.enableRiverParticles);
+                            valueSliderReset("Particle density##dw",dwCfg.riverParticleDensity,defDw.riverParticleDensity,0,200,"dw_rpd","Spawn rate of river particles. Higher = fewer particles (1 in X blocks per tick). Default: 50","%d");
+                            ImGui::Checkbox("Visual flow##dw",&dwCfg.enableRiverVisualFlow);tip("Show flowing-water texture on rivers (off keeps still look while still pushing entities).\nPress F3+T in-game after changing. Default: On");resetRw("dw_evf",dwCfg.enableRiverVisualFlow,defDw.enableRiverVisualFlow);
+                            ImGui::Checkbox("River sound##dw",&dwCfg.enableRiverSound);tip("Enable the ambient flowing sound for rivers. Default: On");resetRw("dw_ers",dwCfg.enableRiverSound,defDw.enableRiverSound);
+                            ImGui::Checkbox("Custom main menu panorama##dw",&dwCfg.customMainMenuPanorama);tip("Use Dynamic Waters' custom river panorama on Minecraft's main menu.\nIn-game / TOML export only. Default: On");resetRw("dw_mmp",dwCfg.customMainMenuPanorama,defDw.customMainMenuPanorama);
+                            ImGui::Checkbox("Show main menu button##dw",&dwCfg.showMainMenuButton);tip("Show the Dynamic Waters settings quick button on Minecraft's main menu.\nIn-game / TOML export only. Default: On");resetRw("dw_mmb",dwCfg.showMainMenuButton,defDw.showMainMenuButton);
+                            ImGui::Checkbox("Show welcome message##dw",&dwCfg.showWelcomeMessage);tip("Show the one-time Dynamic Waters welcome chat message upon joining a world.\nIn-game / TOML export only. Default: On");resetRw("dw_wm",dwCfg.showWelcomeMessage,defDw.showWelcomeMessage);
+                            ImGui::Checkbox("Disable Tectonic underground rivers##dw",&dwCfg.disableTectonicUndergroundRivers);tip("Automatically disable underground rivers from the Tectonic mod\nfor better performance and compatibility. Default: On");resetRw("dw_dtur",dwCfg.disableTectonicUndergroundRivers,defDw.disableTectonicUndergroundRivers);
+                            ImGui::TreePop();
+                        }
+
+                        if(ImGui::Button("Export dynamicwaters-common.toml")){
+                            std::array<wchar_t,32768> fp{};
+                            std::filesystem::path init=appRoot/"exports";std::filesystem::create_directories(init);
+                            std::wstring defName=L"dynamicwaters-common.toml";std::copy(defName.begin(),defName.end(),fp.begin());
+                            OPENFILENAMEW dlg{};dlg.lStructSize=sizeof(dlg);dlg.hwndOwner=glfwGetWin32Window(window);
+                            dlg.lpstrFile=fp.data();dlg.nMaxFile=static_cast<DWORD>(fp.size());
+                            dlg.lpstrFilter=L"TOML config (*.toml)\0*.toml\0All files (*.*)\0*.*\0";dlg.lpstrDefExt=L"toml";dlg.lpstrInitialDir=init.c_str();
+                            dlg.Flags=OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|OFN_OVERWRITEPROMPT;
+                            if(GetSaveFileNameW(&dlg)){
+                                try{std::ofstream out(std::filesystem::path(fp.data()));out<<dwCfg.toToml();dwExportStatus="Exported dynamicwaters-common.toml.";}
+                                catch(const std::exception& e){dwExportStatus=e.what();}
+                            }
+                        }
+                        tip("Write the current Dynamic Waters settings to dynamicwaters-common.toml for Minecraft.");
+                        ImGui::SameLine();
+                        if(ImGui::Button("Reset##dw")){bool wasEn=dwCfg.enabled;dwCfg=dw::DynamicWatersConfig{};dwCfg.enabled=wasEn;dwExportStatus="Reset Dynamic Waters config.";}
+                        tip("Restore all Dynamic Waters mod config settings to their defaults.");
+                        if(!dwExportStatus.empty())ImGui::TextWrapped("%s",dwExportStatus.c_str());
+                        ImGui::Unindent(10.0f);
+                    }
+                }
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+            restoredRightTab=-1;
             }
             }
             dock.end(rightVisible);
-            if(changed&&std::memcmp(&before,&params,sizeof(params))!=0){if(!editing){if(undo.size()>100)undo.erase(undo.begin());undo.push_back(before);}editing=ImGui::IsAnyItemActive();redo.clear();}
-            if(!ImGui::IsAnyItemActive())editing=false;
+            if(!didUndoThisFrame){
+                if(editor.document.loaded()&&editor.historyPosition()>presetHistBefore){
+                    if(undoTimeline.size()>200)undoTimeline.erase(undoTimeline.begin());
+                    undoTimeline.push_back(UndoKind::Preset);redoTimeline.clear();modRedo.clear();
+                }
+                if(changed&&std::memcmp(&before,&params,sizeof(params))!=0){
+                    if(!editing){
+                        if(undo.size()>100)undo.erase(undo.begin());
+                        undo.push_back(before);
+                        if(!editor.document.loaded()){
+                            if(undoTimeline.size()>200)undoTimeline.erase(undoTimeline.begin());
+                            undoTimeline.push_back(UndoKind::Terrain);redoTimeline.clear();modRedo.clear();
+                        }
+                    }
+                    editing=ImGui::IsAnyItemActive();redo.clear();
+                }
+                if(captureModConfig()!=modBefore){
+                    if(!modEditing){
+                        if(modUndo.size()>100)modUndo.erase(modUndo.begin());
+                        modUndo.push_back(modBefore);
+                        if(undoTimeline.size()>200)undoTimeline.erase(undoTimeline.begin());
+                        undoTimeline.push_back(UndoKind::ModConfig);redoTimeline.clear();modRedo.clear();
+                    }
+                    modEditing=ImGui::IsAnyItemActive();
+                }
+            }
+            didUndoThisFrame=false;
+            if(!ImGui::IsAnyItemActive()){editing=false;modEditing=false;}
             if(options.exercise){
                 constexpr uint32_t grids[]={64,256,1024,128,512};params.meta.x=grids[(frameNumber/60)%5];
                 if(frameNumber==120)glfwSetWindowSize(window,1280,800);
@@ -821,7 +1739,7 @@ int main(int argc,char** argv){
             if(options.profileExercise){auto variant=(frameNumber/30)%(editor.document.loaded()?12:9);params.meta.z=variant>=8?variant-5:2;params.meta.w=variant>=8?0:variant;if(variant==8)params.detail.x=2098;layer=0;}
             if(options.refineCancelTest&&!refineCancelExercised&&editPreview.job&&editPreview.work.params.meta.x>editPreview.cap&&editPreview.progress()>.4){editor.document.set("/terrain/steppe/weight",7.0);refineCancelExercised=true;}
             if(options.maskExercise&&frameNumber==30)biomeModMask=7;
-            if(!options.openProject.empty()&&frameNumber==2){restoreView(project.load(options.openProject,editor.document,worldSeed,true));if(options.testHighlight>=0){editor.terrainSelection=options.testHighlight;editor.highlightTerrain=true;}}   /* test flag: open a saved project (e.g. a crash report's last session) */
+            if(!options.openProject.empty()&&frameNumber==2){restoreView(project.load(options.openProject,editor.document,worldSeed,true));if(options.testHighlight>=0){editor.terrainSelection=options.testHighlight;editor.highlightTerrain=true;}if(options.enableDynamicWaters)dwCfg.enabled=true;}   /* test flag: open a saved project (e.g. a crash report's last session) */
             if(!options.sliderEdit.empty()&&frameNumber>=options.sliderStartFrame&&frameNumber<=options.sliderEndFrame){auto equals=options.sliderEdit.find('=');if(equals==std::string::npos)throw std::runtime_error("Slider exercise requires /path=end_value");auto path=PresetJson::json_pointer(options.sliderEdit.substr(0,equals));if(frameNumber==options.sliderStartFrame)sliderOriginal=editor.document.data.at(path).get<double>();double end=std::stod(options.sliderEdit.substr(equals+1)),t=double(frameNumber-options.sliderStartFrame)/std::max(1,options.sliderEndFrame-options.sliderStartFrame);editor.document.data[path]=std::lerp(sliderOriginal,end,t);}
             if(options.weightExercise&&frameNumber==30){auto equals=options.exerciseEdit.find('=');editor.document.set(options.exerciseEdit.substr(0,equals),PresetJson::parse(options.exerciseEdit.substr(equals+1)));}
             if(automatic&&frameNumber>80&&frameNumber-lastQualityChange>120&&!options.benchmark){
@@ -845,23 +1763,52 @@ int main(int argc,char** argv){
             if(previewValid&&(!std::isfinite(params.domain.x)||params.domain.x<=0||params.land.y<=0||params.climate.z<=0||(params.meta.z==3&&params.detail.x<1))){
                 status="Preview paused: view extent and noise scales must be positive.";params=previous;previewValid=false;
             }
-            if(previewValid){
+            const bool hasPresetScene=editor.document.loaded()||params.meta.z<4;
+            if(previewValid&&hasPresetScene){
                 // Transient stress-test changes follow preset mapping; the preset document stays editable/exportable.
                 if(animate&&!editor.document.loaded()){if(params.meta.z>=3)params.domain.y+=2.0f;else if(params.meta.z==2&&(params.meta.w==1||params.meta.w==2||params.meta.w>=6))params.ftfScales.z=1+std::sin(static_cast<float>(elapsed)*1.7f)*.25f;else params.land.x=800+std::sin(static_cast<float>(elapsed)*1.7f)*220;params.climate.x=std::sin(static_cast<float>(elapsed)*.9f)*.25f;}
-                try{params.meta.y=params.meta.z==1?static_cast<uint32_t>(worldSeed):ftfSeed(static_cast<uint64_t>(worldSeed));updateGraphInputs(params,graphSeeds,graphRoot);if(params.meta.z==4||params.meta.z==5)buildLandMix(editor.document.data,worldSeed,graphSeeds,!options.providerOnly);if(params.meta.z==5||params.meta.z==6)buildUpliftInputs(editor.document.data,worldSeed,graphSeeds,!options.noIslands);if(params.meta.z==5)buildClimateInputs(editor.document.data,worldSeed,graphSeeds,!options.noClimate);else buildClimateInputs(editor.document.data,worldSeed,graphSeeds,false);graphSeeds.biomeSeeds2.w=graphSeeds.climateMeta.x?static_cast<uint32_t>(biomeColors):0u;if(options.testBiome>=0){if(options.testBiome>=static_cast<int>(biomeLegend["biomes"].size()))throw std::runtime_error("Invalid test biome ID");graphSeeds.biomeOptions.z=static_cast<float>(options.testBiome+1);}buildWorldFilterInputs(editor.document.data,worldSeed,graphSeeds,params.meta.z==5&&!options.noWorldFilters,ftfVersions[ftfVersionIndex].profile);buildSurfaceInputs(editor.document.data,worldSeed,graphSeeds,params.meta.z==5&&graphSeeds.climateMeta.x!=0u);graphSeeds.surfaceMeta.w=(showOceanFloor?1u:0u)|(biomeModMask<<1);graphSeeds.surfaceOptions.w=options.materialDebug>=0?2.0f+float(options.materialDebug):options.testMaterialIDs?1.0f:0.0f;if(params.meta.z==5)riverNetworks.update(editor.document.data,worldSeed,graphSeeds,params,!options.noRivers);}
+                try{const int ftfProf=ftfVersions[ftfVersionIndex].profile;params.meta.y=params.meta.z==1?static_cast<uint32_t>(worldSeed):ftfSeed(static_cast<uint64_t>(worldSeed));updateGraphInputs(params,graphSeeds,graphRoot);if(params.meta.z==4||params.meta.z==5)buildLandMix(editor.document.data,worldSeed,graphSeeds,!options.providerOnly);if(params.meta.z==5||params.meta.z==6)buildUpliftInputs(editor.document.data,worldSeed,graphSeeds,!options.noIslands,ftfProf);if(params.meta.z==5)buildClimateInputs(editor.document.data,worldSeed,graphSeeds,!options.noClimate,ftfProf);else buildClimateInputs(editor.document.data,worldSeed,graphSeeds,false,ftfProf);graphSeeds.biomeSeeds2.w=graphSeeds.climateMeta.x?static_cast<uint32_t>(biomeColors):0u;if(options.testBiome>=0){if(options.testBiome>=static_cast<int>(biomeLegend["biomes"].size()))throw std::runtime_error("Invalid test biome ID");graphSeeds.biomeOptions.z=static_cast<float>(options.testBiome+1);}buildWorldFilterInputs(editor.document.data,worldSeed,graphSeeds,params.meta.z==5&&!options.noWorldFilters,ftfProf);buildSurfaceInputs(editor.document.data,worldSeed,graphSeeds,params.meta.z==5&&graphSeeds.climateMeta.x!=0u);graphSeeds.surfaceMeta.w=(showOceanFloor?1u:0u)|(biomeModMask<<1);graphSeeds.surfaceOptions.w=options.materialDebug>=0?2.0f+float(options.materialDebug):options.testMaterialIDs?1.0f:0.0f;if(params.meta.z==5)riverNetworks.update(editor.document.data,worldSeed,graphSeeds,params,!options.noRivers);}
                 catch(const std::exception& error){if(options.hidden)throw;status=error.what();editor.feedback=status;editor.feedbackLive=false;params=previous;graphSeeds=previousSeeds;previewValid=false;}
             }
             if(swappedAnimated)std::swap(editor.document.data,animatedData);
             if(std::memcmp(&params,&previous,sizeof(params))!=0||std::memcmp(&graphSeeds,&previousSeeds,sizeof(graphSeeds))!=0){++revision;previous=params;previousSeeds=graphSeeds;}
             if(graphicsPersistent&&savedGraphics!=graphicsState().dump())try{ProjectSession::atomicJson(graphicsFile,graphicsState());savedGraphics=graphicsState().dump();migrateLegacyGraphics=false;}catch(const std::exception& e){editor.status=e.what();}
             if(riverNetworks.buffer!=previousRiverWords){previousRiverWords=riverNetworks.buffer;++revision;}
+            {
+                const uint64_t dwH=dwCfg.enabled?dwCfg.generationHash():0ull;
+                if(dwH!=dwPendingEditHash){dwPendingEditHash=dwH;dwEditAt=elapsed;}
+                const bool dwVanillaNow=dwCfg.usesVanillaGpuRivers();
+                const bool dwGpuModeChanged=(dwVanillaNow!=previousDwVanillaGpu)||(!dwCfg.enabled&&previousDwEnabled);
+                if(dwGpuModeChanged){
+                    previousDwVanillaGpu=dwVanillaNow;previousDwEnabled=dwCfg.enabled;previousDwHash=dwH;previousDwSeed=worldSeed;
+                    dwActiveCfg=dwCfg;++revision;
+                }else if((dwH!=previousDwHash||(dwCfg.enabled&&worldSeed!=previousDwSeed))&&(!ImGui::IsAnyItemActive()||elapsed-dwEditAt>=0.15||options.frames>0)){
+                    previousDwVanillaGpu=dwVanillaNow;previousDwEnabled=dwCfg.enabled;previousDwHash=dwH;previousDwSeed=worldSeed;
+                    dwActiveCfg=dwCfg;
+                }
+            }
+            const bool interactiveGui=(options.frames==0&&!options.hidden);
+            const bool dwActiveMode=(dwActiveCfg.enabled&&params.meta.z==5);
+            const bool dwCameraSettled=!dwActiveMode||!interactiveGui||cameraMovedAt<0.0||(elapsed-cameraMovedAt>=0.35);
+            const glm::vec2 dwAutoTarget=detailPlaced?detailCenter:glm::vec2(params.domain.y,params.domain.z);
+            if(!dwAutoFocusValid||(!dwPinSet&&dwPrevPinSet)||(dwActiveCfg.enabled&&!dwPrevEnabled)||options.frames>0){
+                dwAutoFocusActive=dwAutoTarget;
+                dwAutoFocusValid=true;
+            }else if(!dwPinSet&&dwCameraSettled&&glm::length(dwAutoTarget-dwAutoFocusActive)>1.0f){
+                dwAutoFocusActive=dwAutoTarget;
+            }
+            dwPrevPinSet=dwPinSet;
+            dwPrevEnabled=dwActiveCfg.enabled;
+            const glm::vec2 dwFocus=dwPinSet?dwPinPos:dwAutoFocusActive;
+            surface.configureDynamicWaters(dwActiveCfg,worldSeed,dwFocus,true,dwPreviewRadius,dwPinSet);
+            editPreview.worker.configureDynamicWaters(dwActiveCfg,worldSeed,dwFocus,true,dwPreviewRadius,dwPinSet);
             requestedResolution=params.meta.x;
             editPreview.worker.selectiveGeneration=surface.selectiveGeneration;
-            editPreview.plan(params,graphSeeds,riverNetworks.buffer,revision,elapsed,ImGui::IsAnyItemActive()||animate||(!options.sliderEdit.empty()&&frameNumber>=options.sliderStartFrame&&frameNumber<=options.sliderEndFrame));
+            if(hasPresetScene)editPreview.plan(params,graphSeeds,riverNetworks.buffer,revision,elapsed,ImGui::IsAnyItemActive()||animate||(!options.sliderEdit.empty()&&frameNumber>=options.sliderStartFrame&&frameNumber<=options.sliderEndFrame));
             RenderSnapshotScope renderSnapshot(params,graphSeeds,revision,editPreview.display);
             dock.layout(vp);ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{0,0});bool viewportVisible=dock.begin("Terrain viewport",dock.viewport,dock.viewportHidden,"v","^",ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);viewportCollapsed=dock.viewportHidden;
             observedPanelHide|=dock.leftHidden||dock.rightHidden||dock.bottomHidden||dock.viewportHidden;
-            if(persistentSession&&savedDockLayout!=dock.snapshot().dump()){try{auto j=dock.snapshot();ProjectSession::atomicJson(dockLayoutFile,PresetJson::parse(j.dump()));savedDockLayout=j.dump();}catch(const std::exception& e){editor.status=e.what();}}
+            if(persistentSession){if(auto cur=captureGlobalLayout().dump();cur!=savedGlobalLayout){try{ProjectSession::atomicJson(globalLayoutFile,PresetJson::parse(cur));savedGlobalLayout=cur;}catch(const std::exception& e){editor.status=e.what();}}}
             if(viewportCollapsed){renderSnapshot.restore();dock.end(viewportVisible);ImGui::PopStyleVar();ImGui::Render();gpu.end(ImGui::GetDrawData());
                 if(persistentSession&&elapsed-sessionTick>=1){try{project.tick(editor.document,worldSeed,captureView(),elapsed);sessionTick=elapsed;}catch(const std::exception& e){editor.status=e.what();}}
                 ++frameNumber;if(!options.hidden&&!options.benchmark)std::this_thread::sleep_until(start+std::chrono::microseconds(1000000/(fpsLimit>0?fpsLimit:60)));continue;
@@ -874,9 +1821,11 @@ int main(int argc,char** argv){
             }
             uint32_t fi=gpu.swap.FrameIndex;
             auto corner=ImGui::GetCursorScreenPos();ImGui::Image(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(surface.frames[fi].texture)),size);
+            ImGui::GetWindowDrawList()->ChannelsSplit(2);
+            ImGui::GetWindowDrawList()->ChannelsSetCurrent(1);
             bool viewportHovered=ImGui::IsItemHovered();const bool flyActive=flyMode&&!topDown,walkActive=walkMode&&!topDown;
             auto afterImage=ImGui::GetCursorScreenPos();
-            bool displayPopupActive=false;const float toolbarHeight=39.0f*8+12;
+            bool displayPopupActive=false;const float toolbarHeight=39.0f*9+12;
             ImGui::SetCursorScreenPos({corner.x+size.x-126,corner.y+14});ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{6,6});
             ImGui::BeginChild("Viewport display controls",{112,46},ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding,ImGuiWindowFlags_NoScrollbar);
             auto viewButton=[&](const char* id,bool palette){bool clicked=ImGui::Button(id,{46,32});auto a=ImGui::GetItemRectMin();auto* draw=ImGui::GetWindowDrawList();auto ink=ImGui::GetColorU32(ImGuiCol_Text);
@@ -954,14 +1903,15 @@ int main(int argc,char** argv){
             ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,7);
             ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(.045f,.075f,.095f,.95f));
             ImGui::BeginChild("Viewport tools",{54,toolbarHeight},ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
-            if(toolIconButton("##navigateTool",ToolIcon::Navigate,!detailTool&&!centerTool&&!spawnTool&&!measureTool&&!pointTool&&!copyTool)){detailTool=centerTool=spawnTool=measureTool=copyTool=false;}
+            if(toolIconButton("##navigateTool",ToolIcon::Navigate,!detailTool&&!centerTool&&!spawnTool&&!measureTool&&!pointTool&&!copyTool&&!dwTool)){detailTool=centerTool=spawnTool=measureTool=pointTool=copyTool=dwTool=false;}
             if(ImGui::IsItemHovered())ImGui::SetTooltip("Navigate [Esc]\nLMB/MMB: orbit | RMB: pan | Wheel: zoom | R: reset");
-            if(toolIconButton("##centerTool",ToolIcon::Center,centerTool)){centerTool=!centerTool;detailTool=spawnTool=measureTool=false;}
+            if(toolIconButton("##centerTool",ToolIcon::Center,centerTool)){centerTool=!centerTool;detailTool=spawnTool=measureTool=dwTool=false;}
             if(ImGui::IsItemHovered())ImGui::SetTooltip("Center camera [C]\nLMB: set orbit center | MMB: orbit | R: reset");
-            if(toolIconButton("##spawnTool",ToolIcon::Spawn,spawnTool)){spawnTool=!spawnTool;detailTool=centerTool=measureTool=false;}if(ImGui::IsItemHovered())ImGui::SetTooltip("Set spawn [P]\nLMB place preset spawn | MMB orbit | RMB pan");
-            if(toolIconButton("##measureTool",ToolIcon::Measure,measureTool)){measureTool=!measureTool;detailTool=centerTool=spawnTool=false;}if(ImGui::IsItemHovered())ImGui::SetTooltip("Measure distance [M]\nLMB add points | Backspace remove last | Enter finish | MMB orbit");
-            if(toolIconButton("##pointTool",ToolIcon::Pin,pointTool)){pointTool=!pointTool;if(pointTool){detailTool=centerTool=spawnTool=measureTool=false;}}if(ImGui::IsItemHovered())ImGui::SetTooltip("Points [B]\nLMB: pin a named point for this project | list in the right panel | MMB orbit");
-            if(toolIconButton("##copyTool",ToolIcon::Copy,copyTool)){copyTool=!copyTool;if(copyTool){detailTool=centerTool=spawnTool=measureTool=pointTool=walkPickTool=false;}}if(ImGui::IsItemHovered())ImGui::SetTooltip("Copy coordinates [K]\nLMB: copy X Y Z of the clicked spot (block coordinates, Y on top of the ground; paste after /tp) | MMB orbit");
+            if(toolIconButton("##spawnTool",ToolIcon::Spawn,spawnTool)){spawnTool=!spawnTool;detailTool=centerTool=measureTool=dwTool=false;}if(ImGui::IsItemHovered())ImGui::SetTooltip("Set spawn [P]\nLMB place preset spawn | MMB orbit | RMB pan");
+            if(toolIconButton("##measureTool",ToolIcon::Measure,measureTool)){measureTool=!measureTool;detailTool=centerTool=spawnTool=dwTool=false;}if(ImGui::IsItemHovered())ImGui::SetTooltip("Measure distance [M]\nLMB add points | Backspace remove last | Enter finish | MMB orbit");
+            if(toolIconButton("##pointTool",ToolIcon::Pin,pointTool)){pointTool=!pointTool;if(pointTool){detailTool=centerTool=spawnTool=measureTool=dwTool=false;}}if(ImGui::IsItemHovered())ImGui::SetTooltip("Points [B]\nLMB: pin a named point for this project | list in the right panel | MMB orbit");
+            if(toolIconButton("##copyTool",ToolIcon::Copy,copyTool)){copyTool=!copyTool;if(copyTool){detailTool=centerTool=spawnTool=measureTool=pointTool=walkPickTool=dwTool=false;}}if(ImGui::IsItemHovered())ImGui::SetTooltip("Copy coordinates [K]\nLMB: copy X Y Z of the clicked spot (block coordinates, Y on top of the ground; paste after /tp) | MMB orbit");
+            if(toolIconButton("##dwTool",ToolIcon::DynamicWater,dwTool)){dwTool=!dwTool;if(dwTool){detailTool=centerTool=spawnTool=measureTool=pointTool=copyTool=walkPickTool=false;}}if(ImGui::IsItemHovered())ImGui::SetTooltip("Dynamic Waters focus [U]\nLMB: set preview center point and generate rivers within the software preview radius | MMB orbit | RMB pan");
             ImGui::Separator();
             ImGui::BeginDisabled(topDown);if(toolIconButton("##flyMode",ToolIcon::Fly,flyActive)){if(flyMode)leaveFly();else enterFly();}ImGui::EndDisabled();
             if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Fly camera [F]\nUnreal-style: RMB look, WASD move, Q/E down/up, wheel = speed, Shift fast, Ctrl slow");
@@ -971,12 +1921,40 @@ int main(int argc,char** argv){
             ImGui::EndChild();ImGui::PopStyleColor();ImGui::PopStyleVar(2);
             ImGui::SetCursorScreenPos(afterImage);
             bool overToolbar=io.MousePos.x>=corner.x+12&&io.MousePos.x<=corner.x+66&&io.MousePos.y>=corner.y+14&&io.MousePos.y<=corner.y+14+toolbarHeight;
-            bool placeDetail=false,centerClick=false,spawnClick=false,measureClick=false,pointClick=false,copyClick=false;bool hoverAllowed=viewportHovered&&!overToolbar&&!ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId)&&!(walkMode&&walkMouseCaptured);bool inspectHover=hoverAllowed&&!walkActive&&params.meta.z==5&&graphSeeds.climateMeta.x&&elapsed-lastHoverTime>.12;
+            bool placeDetail=false,centerClick=false,spawnClick=false,measureClick=false,pointClick=false,copyClick=false,dwClick=false;bool hoverAllowed=viewportHovered&&!overToolbar&&!ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId)&&!(walkMode&&walkMouseCaptured);
+            const bool cameraBusyForHover=ImGui::IsMouseDown(ImGuiMouseButton_Left)||ImGui::IsMouseDown(ImGuiMouseButton_Right)||ImGui::IsMouseDown(ImGuiMouseButton_Middle)||(elapsed-cameraMovedAt<0.18);
+            bool inspectHover=hoverAllowed&&!walkActive&&!cameraBusyForHover&&params.meta.z==5&&graphSeeds.climateMeta.x&&elapsed-lastHoverTime>.12;
             if(!hoverAllowed)hover.valid=false;
             if(walkMode&&!walkMouseCaptured&&viewportHovered&&!overToolbar&&!ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId)&&ImGui::IsMouseClicked(ImGuiMouseButton_Left))setCursorCapture(true);
+            measureHasCursor=false;measureHoverVertex=-1;
+            if(!measurePoints.empty()&&viewportHovered&&!overToolbar&&!walkMode&&measureDragIndex<0){
+                float bestDist=12.0f;
+                for(size_t i=0;i<measurePoints.size();++i){
+                    ImVec2 sp;
+                    auto clip=meshVp*glm::vec4(measurePoints[i].x-params.domain.y,measurePoints[i].y*exaggeration,measurePoints[i].z-params.domain.z,1);
+                    if(clip.w>0){
+                        auto p=(glm::vec2(clip)/clip.w*.5f+.5f)*glm::vec2(size.x,size.y);
+                        sp={corner.x+p.x,corner.y+p.y};
+                        if(std::isfinite(sp.x)&&std::isfinite(sp.y)){
+                            float dx=sp.x-io.MousePos.x,dy=sp.y-io.MousePos.y,d=std::sqrt(dx*dx+dy*dy);
+                            if(d<bestDist){bestDist=d;measureHoverVertex=int(i);}
+                        }
+                    }
+                }
+            }
+            if(measureDragIndex>=0&&(!ImGui::IsMouseDown(ImGuiMouseButton_Left)||measureDragIndex>=int(measurePoints.size())))measureDragIndex=-1;
+            bool measureDragActive=measureDragIndex>=0&&ImGui::IsMouseDown(ImGuiMouseButton_Left);
+            bool measurePreview=measureTool&&hoverAllowed&&!measurePoints.empty()&&!measureDragActive;
             if(viewportHovered&&!overToolbar&&!ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId)&&!walkMode){
                 placeDetail=detailTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);
-                centerClick=centerTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);spawnClick=spawnTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);measureClick=measureTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);pointClick=pointTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);copyClick=copyTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+                centerClick=centerTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);spawnClick=spawnTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);pointClick=pointTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);copyClick=copyTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);dwClick=dwTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+                if(measureTool){
+                    if(ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))measureTool=false;
+                    else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
+                        if(measureHoverVertex>=0)measureDragIndex=measureHoverVertex;
+                        else measureClick=true;
+                    }
+                }
                 if(walkPickTool&&ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hover.valid){walkPickTool=false;enterWalk({hover.position.x,hover.position.z});}
                 if(ImGui::IsMouseClicked(ImGuiMouseButton_Right)&&io.KeyCtrl&&io.KeyShift)sunDrag=true;
                 if(sunDrag&&io.MouseDelta.x!=0){sunAzimuth=std::fmod(sunAzimuth+io.MouseDelta.x*.25f,360.0f);if(sunAzimuth<0)sunAzimuth+=360;}
@@ -989,7 +1967,7 @@ int main(int argc,char** argv){
                     pan+=(-right*io.MouseDelta.x+up*io.MouseDelta.y)*scale;if(!topDown)cameraPanY+=std::cos(pitch)*io.MouseDelta.y*scale;
                 }
                 if(!flyActive&&!(detailTool&&io.KeyCtrl))distance=std::max(1e-12f,std::min(4.0f,distance*std::exp(-io.MouseWheel*.12f)));
-                if(!detailTool&&!centerTool&&!spawnTool&&!measureTool&&!pointTool&&!copyTool&&!flyActive&&ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)){pan={};cameraPanY=0;distance=1;cameraCentered=false;}
+                if(!flyActive&&!detailTool&&!centerTool&&!spawnTool&&!measureTool&&!pointTool&&!copyTool&&!dwTool&&ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)){pan={};cameraPanY=0;distance=1;cameraCentered=false;}
             }
             if(sunDrag&&!io.MouseDown[1])sunDrag=false;
             if(flyActive&&(viewportHovered||io.MouseDown[1])&&!keysBlocked&&!ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId)){
@@ -999,29 +1977,64 @@ int main(int argc,char** argv){
             }
             if(screenDetail&&detailTool&&!detailPlaced&&viewportHovered&&!overToolbar){auto* brush=ImGui::GetWindowDrawList();brush->AddCircle(io.MousePos,detailScreenRadius,IM_COL32(120,240,209,210),96,1.6f);}
             if(detailPlaced&&screenDetail&&detailScreen.w>0){auto* brush=ImGui::GetWindowDrawList();brush->AddCircle({corner.x+detailScreen.x,corner.y+detailScreen.y},detailScreenRadius,IM_COL32(55,224,190,235),96,1.7f);}
-            if(hover.valid&&hoverAllowed&&measurePoints.empty()&&!measureTool){auto* hud=ImGui::GetWindowDrawList();ImVec2 pos{corner.x+14,corner.y+size.y-119};hud->AddRectFilled(pos,{pos.x+std::min(520.0f,size.x-28),pos.y+106},IM_COL32(11,19,25,235),7);char line[240];float yy=pos.y+10;
+            if(hover.valid&&hoverAllowed&&measurePoints.empty()&&!measureTool){
+                DynamicWatersSample dws{};
+                if(dwCfg.enabled&&params.meta.z==5){
+                    Surface* hTarget=&surface;
+                    if(detailPlaced&&detailInitialized&&detailSurface.fieldRevision&&glm::length(glm::vec2(hover.position.x,hover.position.z)-detailCenter)<detailRenderRadius)hTarget=&detailSurface;
+                    dws=hTarget->inspectDynamicWaters(int(std::floor(hover.position.x)),int(std::floor(hover.position.z)));
+                }
+                const bool showDw=dws.active&&(dws.modifies||dws.overrideRiverBiome);
+                auto* hud=ImGui::GetWindowDrawList();ImVec2 pos{corner.x+14,corner.y+size.y-(showDw?139.0f:119.0f)};hud->AddRectFilled(pos,{pos.x+std::min(520.0f,size.x-28),pos.y+(showDw?126.0f:106.0f)},IM_COL32(11,19,25,235),7);char line[240];float yy=pos.y+10;
                 for(auto text:{std::string("Biome: ")+hover.biome,std::string("Terrain: ")+hover.terrain,std::string("Block: ")+hover.block}){hud->AddText({pos.x+12,yy},IM_COL32(218,234,230,255),text.c_str());yy+=20;}
                 std::snprintf(line,sizeof(line),"X %.1f  Y %.1f  Z %.1f | Ground %.1f",hover.position.x,hover.position.y,hover.position.z,hover.sample.values.x);hud->AddText({pos.x+12,yy},IM_COL32(157,193,185,255),line);
+                if(showDw){
+                    yy+=20;
+                    const char* kind=dws.isLake?"Mountain Lake":dws.isMountainRiver?"Mountain River":dws.isMainRiverWater?"Main River":dws.isWatershedWall?"Watershed Wall":"River Bank";
+                    char dwLine[240];
+                    if(dws.waterTopY>dws.finalSolidY)std::snprintf(dwLine,sizeof(dwLine),"DW: %s | water Y %d%s | flow %.2f, %.2f",kind,dws.waterTopY,dws.isIceSurface?" (ice)":"",dws.flowX,dws.flowZ);
+                    else std::snprintf(dwLine,sizeof(dwLine),"DW: %s (orig Y %d -> %d)",kind,dws.origY,dws.finalSolidY);
+                    hud->AddText({pos.x+12,yy},IM_COL32(124,214,245,255),dwLine);
+                }
             }
-            bool feedbackVisible=!editor.feedback.empty();float feedbackHeight=feedbackVisible?ImGui::CalcTextSize(editor.feedback.c_str(),nullptr,false,380.0f).y+15.0f:0.0f;
-            float previewStatusHeight=editPreview.enabled||editPreview.busy()?(editPreview.busy()?34.0f:24.0f):0.0f;float overlayHeight=(showMetrics?127.0f:57.0f)+feedbackHeight+previewStatusHeight;
-            auto* overlay=ImGui::GetWindowDrawList();overlay->AddRectFilled({corner.x+80,corner.y+14},{corner.x+491,corner.y+overlayHeight},IM_COL32(11,19,25,225),7);
-            overlay->AddText({corner.x+94,corner.y+25},IM_COL32(184,224,211,255),params.meta.z==5?"FTF surface: terrain, water and biomes":params.meta.z==6?"FTF continent map (diagnostic)":params.meta.z==4?"FTF land stage (before continents)":params.meta.z==3?"FTF region map (diagnostic)":"Validation terrain (not full FTF)");
-            if(showMetrics){char text[256];std::snprintf(text,sizeof(text),"%u x %u  |  GPU %.2f ms  |  frame %.1f ms",params.meta.x,params.meta.x,lastDrawTiming.total,smoothedFrame);overlay->AddText({corner.x+94,corner.y+51},IM_COL32(219,228,232,255),text);
-                std::snprintf(text,sizeof(text),"Compute %.2f ms  |  draw %.2f ms",lastTiming.generate,lastDrawTiming.draw);overlay->AddText({corner.x+94,corner.y+76},IM_COL32(145,166,178,255),text);
-                overlay->AddText({corner.x+94,corner.y+101},IM_COL32(145,166,178,255),"Drag: orbit  |  Right drag: pan  |  Wheel: zoom");}
-            if(editPreview.enabled||editPreview.busy())overlay->AddText({corner.x+94,corner.y+(showMetrics?126.0f:56.0f)},IM_COL32(132,225,191,255),editPreview.status().c_str());
-            if(editPreview.busy()){   // loading bar: how far the full-resolution terrain has come
-                float top=corner.y+(showMetrics?146.0f:76.0f),left=corner.x+94,width=380;float fraction=editPreview.job?std::clamp(editPreview.progress(),0.0f,1.0f):0.0f;
-                overlay->AddRectFilled({left,top},{left+width,top+7},IM_COL32(28,48,56,255),3);
-                overlay->AddRectFilled({left,top},{left+std::max(6.0f,width*fraction),top+7},editPreview.job?IM_COL32(72,214,170,255):IM_COL32(236,190,92,255),3);}
-            if(finerProgress>=0&&!topDown){   // finer-detail loading bar along the bottom of the 3D viewport
-                ImVec2 vpMin=ImGui::GetWindowPos(),vpSize=ImGui::GetWindowSize();float left=vpMin.x+16,right=vpMin.x+vpSize.x-16,bottom=vpMin.y+vpSize.y-12;
-                overlay->AddRectFilled({left-6,bottom-27},{right+6,bottom+5},IM_COL32(11,19,25,200),6);overlay->AddText({left,bottom-24},IM_COL32(184,224,211,255),finerLabel);
-                overlay->AddRectFilled({left,bottom-6},{right,bottom},IM_COL32(28,48,56,255),3);overlay->AddRectFilled({left,bottom-6},{left+std::max(6.0f,(right-left)*finerProgress),bottom},IM_COL32(72,214,170,255),3);}
-            if(feedbackVisible)overlay->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{corner.x+94,corner.y+(showMetrics?132.0f:62.0f)+previewStatusHeight},editor.feedbackLive?IM_COL32(133,224,188,255):IM_COL32(246,185,105,255),editor.feedback.c_str(),nullptr,380.0f);
+            auto* overlay=ImGui::GetWindowDrawList();
+            if(hasPresetScene&&!startupSetupOpen){
+                bool feedbackVisible=!editor.feedback.empty();float feedbackHeight=feedbackVisible?ImGui::CalcTextSize(editor.feedback.c_str(),nullptr,false,380.0f).y+15.0f:0.0f;
+                float previewStatusHeight=editPreview.enabled||editPreview.busy()?(editPreview.busy()?34.0f:24.0f):0.0f;float overlayHeight=(showMetrics?127.0f:57.0f)+feedbackHeight+previewStatusHeight;
+                overlay->AddRectFilled({corner.x+80,corner.y+14},{corner.x+491,corner.y+overlayHeight},IM_COL32(11,19,25,225),7);
+                overlay->AddText({corner.x+94,corner.y+25},IM_COL32(184,224,211,255),params.meta.z==5?"FTF surface: terrain, water and biomes":params.meta.z==6?"FTF continent map (diagnostic)":params.meta.z==4?"FTF land stage (before continents)":params.meta.z==3?"FTF region map (diagnostic)":"Validation terrain (not full FTF)");
+                if(showMetrics){char text[256];std::snprintf(text,sizeof(text),"%u x %u  |  GPU %.2f ms  |  frame %.1f ms",params.meta.x,params.meta.x,lastDrawTiming.total,smoothedFrame);overlay->AddText({corner.x+94,corner.y+51},IM_COL32(219,228,232,255),text);
+                    std::snprintf(text,sizeof(text),"Compute %.2f ms  |  draw %.2f ms",lastTiming.generate,lastDrawTiming.draw);overlay->AddText({corner.x+94,corner.y+76},IM_COL32(145,166,178,255),text);
+                    overlay->AddText({corner.x+94,corner.y+101},IM_COL32(145,166,178,255),"Drag: orbit  |  Right drag: pan  |  Wheel: zoom");}
+                if(editPreview.enabled||editPreview.busy())overlay->AddText({corner.x+94,corner.y+(showMetrics?126.0f:56.0f)},IM_COL32(132,225,191,255),editPreview.status().c_str());
+                if(editPreview.busy()){   // loading bar: how far the full-resolution terrain has come
+                    float top=corner.y+(showMetrics?146.0f:76.0f),left=corner.x+94,width=380;float fraction=editPreview.job?std::clamp(editPreview.progress(),0.0f,1.0f):0.0f;
+                    overlay->AddRectFilled({left,top},{left+width,top+7},IM_COL32(28,48,56,255),3);
+                    overlay->AddRectFilled({left,top},{left+std::max(6.0f,width*fraction),top+7},editPreview.job?IM_COL32(72,214,170,255):IM_COL32(236,190,92,255),3);}
+                if(finerProgress>=0&&!topDown){   // finer-detail loading bar along the bottom of the 3D viewport
+                    ImVec2 vpMin=ImGui::GetWindowPos(),vpSize=ImGui::GetWindowSize();float left=vpMin.x+16,right=vpMin.x+vpSize.x-16,bottom=vpMin.y+vpSize.y-12;
+                    overlay->AddRectFilled({left-6,bottom-27},{right+6,bottom+5},IM_COL32(11,19,25,200),6);overlay->AddText({left,bottom-24},IM_COL32(184,224,211,255),finerLabel);
+                    overlay->AddRectFilled({left,bottom-6},{right,bottom},IM_COL32(28,48,56,255),3);overlay->AddRectFilled({left,bottom-6},{left+std::max(6.0f,(right-left)*finerProgress),bottom},IM_COL32(72,214,170,255),3);}
+                if(feedbackVisible)overlay->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{corner.x+94,corner.y+(showMetrics?132.0f:62.0f)+previewStatusHeight},editor.feedbackLive?IM_COL32(133,224,188,255):IM_COL32(246,185,105,255),editor.feedback.c_str(),nullptr,380.0f);
+            }
+            if(!gpu.hasFloat64){
+                const char* warnTitle="Warning: FP32 fallback (no shaderFloat64)";
+                const char* warnSub="GPU lacks FP64; terrain/biome precision reduced";
+                ImVec2 t1=ImGui::CalcTextSize(warnTitle),t2=ImGui::CalcTextSize(warnSub);
+                float cardW=std::min(std::max(t1.x,t2.x)+28.0f,std::max(180.0f,size.x-28.0f)),cardH=48.0f;
+                float topY=narrowView?(corner.y+212.0f):(corner.y+68.0f);
+                ImVec2 p0{corner.x+size.x-14.0f-cardW,topY},p1{corner.x+size.x-14.0f,topY+cardH};
+                overlay->AddRectFilled(p0,p1,IM_COL32(36,24,10,236),7.0f);
+                overlay->AddRect(p0,p1,IM_COL32(236,178,66,225),7.0f,0,1.4f);
+                overlay->AddRectFilled({p0.x,p0.y+4.0f},{p0.x+4.5f,p1.y-4.0f},IM_COL32(246,190,68,255),2.0f);
+                overlay->AddText({p0.x+12.0f,p0.y+6.0f},IM_COL32(255,212,102,255),warnTitle);
+                overlay->AddText({p0.x+12.0f,p0.y+26.0f},IM_COL32(232,216,184,235),warnSub);
+                if(ImGui::IsMouseHoveringRect(p0,p1))
+                    ImGui::SetTooltip("GPU (%s) is running without Vulkan shaderFloat64.\nTerrain, noise, and biome shaders use 32-bit float fallback.",gpu.properties.deviceName);
+            }
             dock.end(viewportVisible);ImGui::PopStyleVar();
             if(params.meta.z==5)surface.updateRivers(editPreview.display.rivers);
+            if(params.meta.z==5||params.meta.z==6)surface.updateVoronoi(params,graphSeeds);
             if(walkMode&&topDown)leaveWalk();
             // collision: the finer patch where it covers the player, else the whole-world grid window under the player, else the coarse pick grid
             auto gridHeight=[&](const std::vector<float>& hv,const TerrainParams& P,glm::vec2 xz,float& out){uint32_t G=P.meta.x;if(G<2||hv.size()!=size_t(G)*G)return false;
@@ -1034,6 +2047,7 @@ int main(int argc,char** argv){
             // Minecraft-like footprint: the player is a 0.6 x 0.6 block column standing on the highest ground under it, so the
             // camera never sinks into a rising slope ahead (a point-sized player let the view clip into hills).
             auto walkFootprint=[&](glm::vec2 xz){float g=walkGround(xz);for(glm::vec2 o:{glm::vec2(.3f,.3f),glm::vec2(-.3f,.3f),glm::vec2(.3f,-.3f),glm::vec2(-.3f,-.3f)})g=std::max(g,walkGround(xz+o));return g;};
+            surface.collectPickHeights(gpu.swap.FrameIndex,baseHeightCache,baseHeightRevision);
             if(walkActive){
                 stallScope("walk heights collect",[&]{std::vector<float> got;TerrainParams gotParams;uint64_t gotRevision=0;if(surface.collectHeights(gpu.swap.FrameIndex,got,gotParams,gotRevision)){baseWalkHeights=std::move(got);baseWalkParams=gotParams;}});
                 if(detailInitialized&&detailAuto){   // collision heights arrive asynchronously (a few frames after the patch was generated); the last valid field stays in use meanwhile
@@ -1081,10 +2095,13 @@ int main(int argc,char** argv){
                     float target=1e9f;
                     {   // aim for about 1.5 screen pixels per sample at the distance of the view target, in power-of-two steps within the user's limits
                         float viewDistance=walkActive?1.62f:flyActive?flyPos.y:params.domain.x*.83f*distance;if(flyActive){float g=0;if(sampleGround({flyPos.x+params.domain.y,flyPos.z+params.domain.z},g))viewDistance=std::max(1.0f,flyPos.y-g);}
-                        float wanted=1.5f*.89f*std::max(1.0f,viewDistance)/float(std::max(1u,h));float stepped=std::exp2(std::round(std::log2(std::max(.01f,wanted))));
+                        float wanted=1.5f*.89f*std::max(1.0f,viewDistance)/float(std::max(1u,h));
+                        if(!walkActive&&!flyActive)wanted*=.5f;   /* lower Orbit zoom trigger threshold so moderate/close Orbit zooms activate adaptive finer detail */
+                        float stepped=std::exp2(std::round(std::log2(std::max(.01f,wanted))));
                         target=std::clamp(stepped,lodFinest,std::max(lodFinest,lodCoarsest));lodAdaptiveSpacing=target;if(target>baseSpacing/1.12f)target=1e9f; // no boost where the whole-world grid is already as fine
                     }
-                    float band=target>1e8f?0.0f:params.domain.x*std::max(.005f,lodBandFraction);int grid=256;while(grid<lodBoostSamples&&2*band/target>grid-1)grid*=2;
+                    float band=target>1e8f?0.0f:params.domain.x*std::max(.005f,lodBandFraction);
+                    int grid=256;while(grid<lodBoostSamples&&2*band/target>grid-1)grid*=2;
                     float radius=std::min({band,(grid-1)*target*.5f,params.domain.x*.45f});if(finerPatchRadius>0&&target<1e8f){float want=finerPatchRadius;grid=256;while(grid<lodBoostSamples&&2*want/target>grid-1)grid*=2;radius=std::min({want,(grid-1)*target*.5f,params.domain.x*.45f});}if(radius>1&&(finerInCameraModes||!(flyActive||walkActive))){wantAuto=true;wantGrid=grid;wantRadius=radius;}}
                 if(options.noFiner)wantAuto=false;   /* test flag: bands only, no finer patch or ring */
                 const bool waitingForStop=wantAuto&&!walkActive&&lodWaitForStop&&elapsed<lodResumeAt;if(waitingForStop)wantAuto=false;
@@ -1113,12 +2130,33 @@ int main(int argc,char** argv){
             glm::vec3 walkEye=walkPos+glm::vec3(0,1.62f,0)-glm::vec3(params.domain.y,0,params.domain.z),walkLook{std::sin(walkYaw)*std::cos(walkPitch),std::sin(walkPitch),std::cos(walkYaw)*std::cos(walkPitch)};
             if(walkActive)center=walkEye+walkLook*50.0f;lastCameraCenter=center;
             if(topDown){center.y=0;float span=std::max(.001f,extent*.55f*distance);draw.vp=glm::ortho(-span,span,-span*h/w,span*h/w,1.0f,extent*10.0f)*glm::lookAt(center+glm::vec3(0,extent*4,0),center,glm::vec3(0,0,-1));}
-            else if(walkActive){atmoEye=walkEye;atmoClip={.08f,std::min(extent*20.0f,3.0e6f)};draw.vp=glm::perspective(glm::radians(cameraFov),static_cast<float>(w)/h,.08f,std::min(extent*20.0f,3.0e6f))*glm::lookAt(walkEye,walkEye+walkLook,glm::vec3(0,1,0));}
+            else if(walkActive){atmoEye=walkEye;float walkFar=std::min(extent*1.5f,32768.0f);atmoClip={.25f,walkFar};draw.vp=glm::perspective(glm::radians(cameraFov),static_cast<float>(w)/h,.25f,walkFar)*glm::lookAt(walkEye,walkEye+walkLook,glm::vec3(0,1,0));}
             else if(flyActive){atmoEye=flyPos;atmoClip={std::max(.05f,flySpeed*.0008f),extent*20.0f};draw.vp=glm::perspective(glm::radians(cameraFov),static_cast<float>(w)/h,std::max(.05f,flySpeed*.0008f),extent*20.0f)*glm::lookAt(flyPos,flyPos+flyDirection(),glm::vec3(0,1,0));}
             else{float radius=std::max(std::max(.001f,glm::length(center)*.000001f),extent*.83f*distance);glm::vec3 eye=center+glm::vec3(std::sin(yaw)*std::cos(pitch),std::sin(pitch),std::cos(yaw)*std::cos(pitch))*radius;
                 draw.vp=glm::perspective(glm::radians(cameraFov),static_cast<float>(w)/h,std::max(.00001f,std::min(extent*.0002f,radius*.001f)),extent*20.0f)*glm::lookAt(eye,center,glm::vec3(0,1,0));atmoEye=eye;atmoClip={std::max(.00001f,std::min(extent*.0002f,radius*.001f)),extent*20.0f};}
             // Flip the entire clip-space Y row for Vulkan, including view terms.
             for(int column=0;column<4;++column)draw.vp[column][1]*=-1;
+            const glm::mat4 unjitteredVP=draw.vp;
+            auto halton=[](uint64_t idx,uint64_t base){float f=1.0f,r=0.0f;while(idx>0){f/=float(base);r+=f*float(idx%base);idx/=base;}return r;};
+            glm::vec2 jitterUv(0.0f);
+            if(taaEnabled&&!topDown){
+                uint64_t hi=(taaFrame%8)+1;
+                float jx=(halton(hi,2)-0.5f)*0.5f,jy=(halton(hi,3)-0.5f)*0.5f;
+                jitterUv=glm::vec2(jx/float(w),jy/float(h));
+                glm::mat4 jitter=glm::translate(glm::mat4(1.0f),glm::vec3(jitterUv.x*2.0f,jitterUv.y*2.0f,0.0f));
+                draw.vp=jitter*unjitteredVP;
+            }
+            surface.taa.enabled=taaEnabled&&!topDown;
+            surface.taa.invCurrVP=glm::inverse(draw.vp);
+            surface.taa.prevVP=taaPrevVP;
+            surface.taa.originDelta=glm::vec2(params.domain.y,params.domain.z)-taaPrevOrigin;
+            surface.taa.jitterUv=jitterUv;
+            surface.taa.sharpness=taaSharpness;
+            surface.taa.reset=!taaHistoryValid;
+            taaPrevVP=unjitteredVP;
+            taaPrevOrigin=glm::vec2(params.domain.y,params.domain.z);
+            taaHistoryValid=surface.taa.enabled;
+            ++taaFrame;
             {auto& a=surface.atmosphere;const float ex=exaggeration;const bool on=!topDown; // volumetric clouds replace the old cloud shadows at draw time only (the saved setting is kept)
                
                 a.water={on&&atmo.water?1.0f:0.0f,atmo.ripple,atmo.reflection,params.land.z*ex};a.fog={on&&atmo.fog?1.0f:0.0f,atmo.fogDensity,atmo.fogFalloff,atmo.fogHeight*ex};
@@ -1157,13 +2195,14 @@ int main(int argc,char** argv){
                 return rayStart+ray**tc;};
             auto mouseRay=[&](glm::vec2 pixel,glm::vec3& rayStart,glm::vec3& ray){auto inverse=glm::inverse(draw.vp);glm::vec2 mouse{(pixel.x-corner.x)/size.x*2-1,(pixel.y-corner.y)/size.y*2-1};
                 auto near4=inverse*glm::vec4(mouse,0,1),far4=inverse*glm::vec4(mouse,.5f,1);rayStart=glm::vec3(near4)/near4.w;ray=glm::normalize(glm::vec3(far4)/far4.w-rayStart);};
-            if((placeDetail||centerClick||spawnClick||measureClick||pointClick||copyClick||inspectHover)&&surface.fieldRevision){
-                if(baseHeightRevision!=surface.fieldRevision||baseHeightCache.empty()){stallScope("pick heights (sync readback)",[&]{baseHeightCache=surface.pickHeights();});baseHeightRevision=surface.fieldRevision;}
+            if((placeDetail||centerClick||spawnClick||measureClick||measureDragActive||measurePreview||pointClick||copyClick||dwClick||inspectHover)&&surface.fieldRevision){
+                if(baseHeightCache.empty()){stallScope("pick heights (sync readback)",[&]{baseHeightCache=surface.pickHeights();});baseHeightRevision=surface.fieldRevision;}
                 bool fineAtCursor=detailPlaced&&detailInitialized&&detailSurface.fieldRevision&&(!screenDetail||(detailScreen.w>0&&glm::length(glm::vec2(io.MousePos.x-corner.x,io.MousePos.y-corner.y)-glm::vec2(detailScreen))<detailScreenRadius));
                 glm::vec3 rayStart,ray;mouseRay({io.MousePos.x,io.MousePos.y},rayStart,ray);
                 // Where the ray meets the mesh as drawn (meshHeight, full resolution); the 129 x 129 base samples only say where to look.
                 bool found=false;glm::vec3 hit{};
-                if(auto picked=meshHit(rayStart,ray)){glm::vec3 point=*picked;if(centerClick){pan={point.x,point.z};cameraHeight=point.y/std::max(.001f,exaggeration);cameraCentered=true;centerTool=false;}else if(spawnClick){editor.placeSpawn({point.x+params.domain.y,point.z+params.domain.z});previousPresetSpawn=editor.document.spawn();spawnMarker={previousPresetSpawn.x,point.y/std::max(.001f,exaggeration),previousPresetSpawn.y};hasSpawnMarker=true;spawnTool=false;}else if(measureClick){measurePoints.push_back({point.x+params.domain.y,point.y/std::max(.001f,exaggeration),point.z+params.domain.z});updateMeasurement();}else if(pointClick){static const uint32_t palette[]={0xffd24a,0x4ad2ff,0xff6b5e,0x7be07b,0xc58bff,0xff9f4a,0x4aa3ff,0xff7bc8};char name[40];std::snprintf(name,sizeof(name),"Point %zu",points.size()+1);points.push_back({name,{point.x+params.domain.y,point.y/std::max(.001f,exaggeration),point.z+params.domain.z},palette[points.size()%8]});highlightedPoint=int(points.size())-1;status="Pinned "+points.back().name;}else if(copyClick){glm::vec3 spot{point.x+params.domain.y,point.y/std::max(.001f,exaggeration),point.z+params.domain.z};char text[96];std::snprintf(text,sizeof(text),"%d %d %d",int(std::floor(spot.x)),int(std::ceil(spot.y)),int(std::floor(spot.z)));ImGui::SetClipboardText(text);copiedText=text;copiedAt=elapsed;status=std::string("Copied coordinates: ")+text;
+                if(auto picked=meshHit(rayStart,ray)){glm::vec3 point=*picked;glm::vec3 worldPt{point.x+params.domain.y,point.y/std::max(.001f,exaggeration),point.z+params.domain.z};if(centerClick){pan={point.x,point.z};cameraHeight=point.y/std::max(.001f,exaggeration);cameraCentered=true;centerTool=false;}else if(spawnClick){editor.placeSpawn({point.x+params.domain.y,point.z+params.domain.z});previousPresetSpawn=editor.document.spawn();spawnMarker={previousPresetSpawn.x,point.y/std::max(.001f,exaggeration),previousPresetSpawn.y};hasSpawnMarker=true;spawnTool=false;}else if(measureDragActive){measurePoints[measureDragIndex]=worldPt;updateMeasurement();}else if(measureClick){if(measureMode==2&&measurePoints.size()>=2)measurePoints[1]=worldPt;else measurePoints.push_back(worldPt);updateMeasurement();}else if(measurePreview){measureHasCursor=true;measureCursorWorld=worldPt;}else if(pointClick){static const uint32_t palette[]={0xffd24a,0x4ad2ff,0xff6b5e,0x7be07b,0xc58bff,0xff9f4a,0x4aa3ff,0xff7bc8};char name[40];std::snprintf(name,sizeof(name),"Point %zu",points.size()+1);points.push_back({name,{point.x+params.domain.y,point.y/std::max(.001f,exaggeration),point.z+params.domain.z},palette[points.size()%8]});highlightedPoint=int(points.size())-1;status="Pinned "+points.back().name;}else if(copyClick){glm::vec3 spot{point.x+params.domain.y,point.y/std::max(.001f,exaggeration),point.z+params.domain.z};char text[96];std::snprintf(text,sizeof(text),"%d %d %d",int(std::floor(spot.x)),int(std::ceil(spot.y)),int(std::floor(spot.z)));ImGui::SetClipboardText(text);copiedText=text;copiedAt=elapsed;status=std::string("Copied coordinates: ")+text;
+                }else if(dwClick){dwPinSet=true;dwPinPos={point.x+params.domain.y,point.z+params.domain.z};if(!dwCfg.enabled)dwCfg.enabled=true;char msg[96];std::snprintf(msg,sizeof(msg),"Dynamic Waters center set to %.0f, %.0f (r=%d)",dwPinPos.x,dwPinPos.y,dwPreviewRadius);status=msg;
                 }else if(placeDetail){releaseAutoPatch();detailCenter={point.x+params.domain.y,point.z+params.domain.z};detailPlaced=true;detailSurfaceHeight=point.y/std::max(.001f,exaggeration);detailLastEdit=elapsed;}hit=point;found=true;}
                 if(inspectHover){lastHoverTime=elapsed;hover.valid=found;if(found){
                     hover.position={hit.x+params.domain.y,hit.y/std::max(.001f,exaggeration),hit.z+params.domain.z};
@@ -1174,7 +2213,7 @@ int main(int argc,char** argv){
                     const char* roles[]={"Land","Badlands","Mountain chain","Volcano","Deep ocean","Shallow ocean","Coast","Island","Beach","Island mountain","River","Wetland","Lake"};hover.terrain=ids.y<13?roles[ids.y]:"Unknown";
                     const char* families[]={"Plains","Steppe","Dales","Hills 1","Hills 2","Plateau","Badlands","Torridonian","Badlands plateau","Mountains low","Mountains","Mountains high","Volcano"};if(ids.w<graphSeeds.mixMeta.x&&ids.y<=1){auto choice=graphSeeds.choices[ids.w];if(choice.y<13){hover.terrain=families[choice.y];if(choice.w&&choice.z<13)hover.terrain+=std::string(" + ")+families[choice.z];}}
                 }}
-                if(!found&&(placeDetail||centerClick||spawnClick||measureClick||pointClick||copyClick))status="Click a visible part of the terrain.";
+                if(!found&&(placeDetail||centerClick||spawnClick||measureClick||pointClick||copyClick||dwClick))status="Click a visible part of the terrain.";
             }
             if(options.pickCheck>0&&frameNumber==options.frames-2&&surface.fieldRevision&&surface.resolution<=2048){   // test: cursor accuracy (base surface only; run with --no-finer)
                 if(baseHeightCache.size()!=129*129)baseHeightCache=surface.pickHeights();auto field=surface.heightField();const uint32_t G=surface.resolution;const float spacing=extent/float(G-1);
@@ -1221,7 +2260,9 @@ int main(int argc,char** argv){
             if(censusRequested){censusRequested=false;censusFingerprint=editor.document.data.dump()+std::to_string(worldSeed)+":"+std::to_string(biomeModMask)+":"+std::to_string(ftfVersionIndex)+":"+std::to_string(params.domain.x)+","+std::to_string(params.domain.y)+","+std::to_string(params.domain.z);try{
                 if(!biomeInitialized){biomeSurface.initialize(&surface);biomeInitialized=true;}
                 censusParams=params;censusParams.meta.x=uint32_t(censusGrid);censusPossible=possibleBiomes(biomeTableWords,biomeModMask);
-                biomeSurface.ensure(censusGrid,1,1);biomeRivers.update(editor.document.data,worldSeed,graphSeeds,censusParams,!options.noRivers);biomeSurface.updateRivers(biomeRivers.buffer);
+                const glm::vec2 dwFocus=dwPinSet?dwPinPos:(detailPlaced?detailCenter:glm::vec2(params.domain.y,params.domain.z));
+                biomeSurface.configureDynamicWaters(dwActiveCfg,worldSeed,dwFocus,true,dwPreviewRadius,dwPinSet);
+                biomeSurface.ensure(censusGrid,1,1);biomeRivers.update(editor.document.data,worldSeed,graphSeeds,censusParams,!options.noRivers);biomeSurface.updateRivers(biomeRivers.buffer);biomeSurface.updateVoronoi(censusParams,graphSeeds);
                 biomeSurface.record(cmd,fi,censusParams,graphSeeds,draw,++biomeRevision,nullptr,nullptr,true);censusWaiting=true;
             }catch(const std::exception& e){censusStatus=e.what();}}
             DrawParams localDraw=draw;bool renderDetail=false;middleActive=false;middleSurface.finerBand=nullptr;detailSurface.detailHole={};
@@ -1235,55 +2276,80 @@ int main(int argc,char** argv){
                 const bool editingNow=elapsed-detailLastEdit<.20;bool displayOnly=false;
                 try{
                     const bool closeFirst=finerDragMode==0;   /* slider drags: the patch and ring at full detail first (newest values), the rest of the world after */
-                    if(detailAuto&&(closeFirst||!editingNow)&&local.meta.x>256){   /* background job toward the wanted full-resolution patch and ring */
+                    const bool wantBackBuild=detailAuto&&(closeFirst||!editingNow)&&local.meta.x>256;
+                    if(wantBackBuild){   /* background job toward the wanted full-resolution patch and ring */
                         // The job follows the newest values (the edit preview's latest snapshot), not the coarse display snapshot drawn meanwhile.
                         const bool latestKnown=editPreview.latest.revision!=0;TerrainParams values=latestKnown?editPreview.latest.params:params;values.meta.x=local.meta.x;values.domain=local.domain;
-                        FinerKey want{values,{},false,latestKnown?editPreview.latest.target:revision};want.midActive=ringFor(values,want.mid);
+                        FinerKey want{values,{},false,false,latestKnown?editPreview.latest.target:revision};want.midActive=ringFor(values,want.mid);
+                        if(frontFull&&frontKey.midActive&&want.midActive&&frontKey.base==want.base&&frontKey.local.meta.z==want.local.meta.z&&frontKey.mid.meta.x==want.mid.meta.x&&std::abs(frontKey.mid.domain.x-want.mid.domain.x)<1e-2f){
+                            float halfPatch=want.local.domain.x*.5f,halfRing=frontKey.mid.domain.x*.45f;
+                            if(std::abs(want.local.domain.y-frontKey.mid.domain.y)+halfPatch<=halfRing&&std::abs(want.local.domain.z-frontKey.mid.domain.z)+halfPatch<=halfRing){want.mid=frontKey.mid;want.midReused=true;}
+                        }
                         if(!(frontFull&&sameKey(frontKey,want))){
                             // Values changed while a job runs: let it finish and swap in, then start one with the newest values (a drag never restarts it forever).
                             const bool coalesce=closeFirst&&backJob&&sameGeometry(backKey,want);
                             if(!backJob||(!sameKey(backKey,want)&&!coalesce)){
                                 if(!backInitialized){detailBack.initialize(&surface);middleBack.initialize(&surface);backInitialized=true;}
-                                vkCheck(vkDeviceWaitIdle(gpu.device));detailBack.cancelGeneration();middleBack.cancelGeneration();   /* rare: a new target; back descriptor sets may still be in flight */
-                                detailBack.ensure(want.local.meta.x,1,1);if(want.midActive)middleBack.ensure(want.mid.meta.x,1,1);
+                                vkCheck(vkDeviceWaitIdle(gpu.device));detailBack.cancelGeneration();if(!want.midReused)middleBack.cancelGeneration();   /* rare: a new target; back descriptor sets may still be in flight */
+                                detailBack.ensure(want.local.meta.x,1,1);if(want.midActive&&!want.midReused)middleBack.ensure(want.mid.meta.x,1,1);
                                 backSeeds=latestKnown?editPreview.latest.seeds:graphSeeds;
                                 if(want.local.meta.z==5){stallScope("detail river networks (CPU)",[&]{detailRiversBack.update(editor.document.data,worldSeed,backSeeds,want.local,!options.noRivers);detailBack.updateRivers(detailRiversBack.buffer);
-                                    if(want.midActive){middleRiversBack.update(editor.document.data,worldSeed,backSeeds,want.mid,!options.noRivers);middleBack.updateRivers(middleRiversBack.buffer);}});}
-                                if(want.midActive)middleBack.bindCoarse(surface);detailBack.bindCoarse(want.midActive?middleBack:surface);   /* the swap carries these bindings to the front pair */
+                                    if(want.midActive&&!want.midReused){middleRiversBack.update(editor.document.data,worldSeed,backSeeds,want.mid,!options.noRivers);middleBack.updateRivers(middleRiversBack.buffer);}});}
+                                if(want.local.meta.z==5||want.local.meta.z==6){detailBack.updateVoronoi(want.local,backSeeds);if(want.midActive&&!want.midReused)middleBack.updateVoronoi(want.mid,backSeeds);}
+                                if(want.midActive&&!want.midReused)middleBack.bindCoarse(surface);
+                                detailBack.bindCoarse(want.midReused?middleSurface:(want.midActive?middleBack:surface));   /* the swap carries these bindings to the front pair */
                                 backKey=want;backJob=true;swapReady=false;++backRevision;finerJobStart=elapsed;finerJobFrame=frameNumber;}
-                            for(Surface* b:{&detailBack,&middleBack}){b->progressiveGeneration=true;if(options.finerBand>=0)b->biomeBandGroups=uint32_t(options.finerBand);b->generationBudgetMs=std::clamp(.72f*1000.0f/float(fpsLimit>0?fpsLimit:60),6.0f,40.0f);   /* ~12 ms at 60 fps; a lower FPS lock gives terrain more time */b->profileSteps=surface.profileSteps;b->biomeBandGroups=options.biomeBand;b->effects=surface.effects;b->sun=surface.sun;b->sunShadow=surface.sunShadow;b->terrainMask=surface.terrainMask;b->scaleCue=surface.scaleCue;b->viewportSize=surface.viewportSize;}
+                            const glm::vec2 dwFocusBack=dwFocus;
+                            const uint64_t wantDwHash=dwActiveCfg.enabled?dwActiveCfg.generationHash():0ull;
+                            const bool dwAllowBackCpu=!dwActiveMode||(dwCameraSettled&&surface.dwEngine&&surface.dwEngine->isInitialized()&&surface.dwEngineHash==wantDwHash&&!surface.dwAsyncBusy()&&!surface.dwPending);
+                            if(backKey.midActive&&!backKey.midReused)middleBack.detailHole={backKey.local.domain.y,backKey.local.domain.z,backKey.local.domain.x*.5f,0};else middleBack.detailHole={};
+                            for(Surface* b:{&detailBack,&middleBack}){b->configureDynamicWaters(dwActiveCfg,worldSeed,dwFocusBack,true,dwPreviewRadius,dwPinSet);b->progressiveGeneration=true;b->generationBudgetMs=editingNow?std::clamp(.72f*1000.0f/float(fpsLimit>0?fpsLimit:60),6.0f,40.0f):std::clamp(1.75f*1000.0f/float(fpsLimit>0?fpsLimit:60),16.0f,45.0f);b->profileSteps=surface.profileSteps;b->biomeBandGroups=options.finerBand>=0?uint32_t(options.finerBand):(options.biomeBand>1?options.biomeBand:4u);b->effects=surface.effects;b->sun=surface.sun;b->sunShadow=surface.sunShadow;b->terrainMask=surface.terrainMask;b->scaleCue=surface.scaleCue;b->viewportSize=surface.viewportSize;}
                             if(detailBack.fieldRevision!=backRevision)detailBack.record(cmd,fi,backKey.local,backSeeds,draw,backRevision,nullptr,nullptr,true);
-                            else if(backKey.midActive&&middleBack.fieldRevision!=backRevision)middleBack.record(cmd,fi,backKey.mid,backSeeds,draw,backRevision,nullptr,nullptr,true);
-                            swapReady=detailBack.fieldRevision==backRevision&&(!backKey.midActive||middleBack.fieldRevision==backRevision);
-                            float done=detailBack.fieldRevision==backRevision?(backKey.midActive?.5f+.5f*middleBack.generationProgress():1.0f):(backKey.midActive?.5f:1.0f)*detailBack.generationProgress();
-                            finerProgress=.5f+.5f*done;finerLabel="Finer detail: building in the background";
+                            else if(backKey.midActive&&!backKey.midReused&&middleBack.fieldRevision!=backRevision)middleBack.record(cmd,fi,backKey.mid,backSeeds,draw,backRevision,nullptr,nullptr,true);
+                            if(interactiveGui&&dwActiveMode&&dwAllowBackCpu){
+                                if(detailBack.fieldRevision==backRevision)detailBack.advanceDynamicWatersAsync();
+                                if(backKey.midActive&&!backKey.midReused&&middleBack.fieldRevision==backRevision)middleBack.advanceDynamicWatersAsync();
+                            }
+                            const bool detailDwDone=!interactiveGui||!dwActiveMode||(!detailBack.dwPending&&!detailBack.dwAsyncBusy());
+                            const bool midDwDone=!interactiveGui||!dwActiveMode||(!middleBack.dwPending&&!middleBack.dwAsyncBusy());
+                            swapReady=detailBack.fieldRevision==backRevision&&detailDwDone&&(!backKey.midActive||backKey.midReused||(middleBack.fieldRevision==backRevision&&midDwDone));
+                            float done=detailBack.fieldRevision==backRevision?((backKey.midActive&&!backKey.midReused)?.5f+.5f*middleBack.generationProgress():1.0f):((backKey.midActive&&!backKey.midReused)?.5f:1.0f)*detailBack.generationProgress();
+                            finerProgress=.5f+.5f*done;finerLabel=(detailBack.dwAsyncBusy()||middleBack.dwAsyncBusy())?"Finer detail: updating Dynamic Waters":"Finer detail: building in the background";
                         }else backJob=false;
                         if(frontFull){displayOnly=true;local=frontKey.local;}   /* keep showing the last complete patch meanwhile */
                         else local.meta.x=256;   /* nothing complete yet: a quick 256 patch now, the full one follows */
-                    }else if(editingNow&&detailGrid>256){local.meta.x=uint32_t(finerDragMode==2?detailGrid:std::min(detailGrid,finerEditGrid));backJob=false;}   /* while dragging: the chosen preview size, or full detail live */
+                    }else{backJob=swapReady=false;if(editingNow&&detailGrid>256)local.meta.x=uint32_t(finerDragMode==2?detailGrid:std::min(detailGrid,finerEditGrid));}   /* while dragging: the chosen preview size, or full detail live */
                     if(!displayOnly)frontFull=false;
+                    const bool skipTempDetailForDw=dwActiveMode&&detailAuto&&interactiveGui&&!frontFull&&wantBackBuild;
                     detailRenderRadius=local.domain.x*.5f;
+                    if(!skipTempDetailForDw){
                     if(!detailInitialized){detailSurface.initialize(&surface);detailInitialized=true;}
                     if(!displayOnly){detailSurface.progressiveGeneration=false;detailSurface.ensure(local.meta.x,1,1);
                         if(detailBaseRevision!=revision||std::memcmp(&local,&previousDetail,sizeof(local))){++detailRevision;detailBaseRevision=revision;previousDetail=local;}
-                        if(params.meta.z==5){stallScope("detail river networks (CPU)",[&]{detailRivers.update(editor.document.data,worldSeed,graphSeeds,local,!options.noRivers);});stallScope("detail river upload",[&]{if(detailSurface.updateRivers(detailRivers.buffer))++detailRevision;});}}
+                        if(params.meta.z==5){stallScope("detail river networks (CPU)",[&]{detailRivers.update(editor.document.data,worldSeed,graphSeeds,local,!options.noRivers);});stallScope("detail river upload",[&]{if(detailSurface.updateRivers(detailRivers.buffer))++detailRevision;});}
+                        if(params.meta.z==5||params.meta.z==6){if(detailSurface.updateVoronoi(local,graphSeeds))++detailRevision;}}
+                    else if(detailSurface.frames.size()!=gpu.swap.ImageCount){detailSurface.ensure(detailSurface.resolution?detailSurface.resolution:local.meta.x,1,1);}
                     TerrainParams mid{};bool ringOn=displayOnly?frontKey.midActive:ringFor(local,mid);if(displayOnly&&ringOn)mid=frontKey.mid;
                     if(ringOn){
                         if(!middleInitialized){middleSurface.initialize(&surface);middleInitialized=true;}
                         if(!displayOnly){middleSurface.progressiveGeneration=false;middleSurface.ensure(mid.meta.x,1,1);
                             if(middleBaseRevision!=revision||std::memcmp(&mid,&middlePrevious,sizeof(mid))){middlePrevious=mid;middleBaseRevision=revision;++middleRevision;}
-                            stallScope("middle river networks (CPU)",[&]{middleRivers.update(editor.document.data,worldSeed,graphSeeds,mid,!options.noRivers);});stallScope("middle river upload",[&]{if(middleSurface.updateRivers(middleRivers.buffer))++middleRevision;});}
+                            stallScope("middle river networks (CPU)",[&]{middleRivers.update(editor.document.data,worldSeed,graphSeeds,mid,!options.noRivers);});stallScope("middle river upload",[&]{if(middleSurface.updateRivers(middleRivers.buffer))++middleRevision;});
+                            if(middleSurface.updateVoronoi(mid,graphSeeds))++middleRevision;}
+                        else if(middleSurface.frames.size()!=gpu.swap.ImageCount){middleSurface.ensure(middleSurface.resolution?middleSurface.resolution:mid.meta.x,1,1);}
                         if(middleBoundGrid!=surface.resolution||boundCoarseGrid!=middleSurface.resolution||boundDetailGrid!=detailSurface.resolution){vkCheck(vkDeviceWaitIdle(gpu.device));middleSurface.bindCoarse(surface);detailSurface.bindCoarse(middleSurface);middleBoundGrid=surface.resolution;boundCoarseGrid=middleSurface.resolution;boundDetailGrid=detailSurface.resolution;}
                         middleDraw=draw;middleDraw.view.x=mid.domain.x;middleDraw.meta.x=mid.meta.x;middleDraw.limits.z=mid.domain.y;middleDraw.limits.w=mid.domain.z;
                         auto offset=glm::vec2(mid.domain.y,mid.domain.z)-originXZ;middleDraw.focus={offset.x,offset.y,extent,mid.domain.x*.5f};
                         middleSurface.effects=surface.effects;middleSurface.sun=surface.sun;middleSurface.sunShadow=surface.sunShadow;middleSurface.terrainMask=surface.terrainMask;middleSurface.scaleCue=surface.scaleCue;middleSurface.viewportSize=surface.viewportSize;middleSurface.screenFocus={};middleSurface.detailHole={local.domain.y,local.domain.z,detailRenderRadius,0};   /* the hole follows the patch actually drawn (the last complete one while a new one builds), else the gap shows sky */
                         middleSurface.frustumCull=frustumCulling;middleSurface.backfaceCull=backfaceCulling;middleSurface.distanceLod=false;middleSurface.lodCamera={0,0};middleSurface.lodBandSize=mid.domain.x*.175f;
-                        middleSurface.record(cmd,fi,mid,graphSeeds,middleDraw,middleRevision,nullptr,nullptr,true);middleActive=true;detailSurface.detailHole.w=extent;
+                        middleSurface.configureDynamicWaters(dwActiveCfg,worldSeed,dwFocus,true,dwPreviewRadius,dwPinSet);
+                        middleSurface.record(cmd,fi,mid,graphSeeds,middleDraw,middleRevision,nullptr,nullptr,true);middleActive=true;detailSurface.detailHole={mid.domain.y-originXZ.x,mid.domain.z-originXZ.y,0,extent};
                     }else if(boundCoarseGrid!=surface.resolution||boundDetailGrid!=detailSurface.resolution||middleBoundGrid){vkCheck(vkDeviceWaitIdle(gpu.device));detailSurface.bindCoarse(surface);boundCoarseGrid=surface.resolution;boundDetailGrid=detailSurface.resolution;middleBoundGrid=0;}
                     localDraw.view.x=local.domain.x;localDraw.meta.x=local.meta.x;localDraw.limits.z=local.domain.y;localDraw.limits.w=local.domain.z;
                     glm::vec2 offset=glm::vec2(local.domain.y,local.domain.z)-glm::vec2(params.domain.y,params.domain.z);
                     localDraw.focus={offset.x,offset.y,middleActive?middlePrevious.domain.x:extent,detailRenderRadius};
                     detailSurface.frustumCull=frustumCulling;detailSurface.backfaceCull=backfaceCulling;detailSurface.distanceLod=adaptiveDetailMesh&&!detailAuto;detailSurface.lodCamera={0,0};detailSurface.lodBandSize=detailRenderRadius*.35f;
+                    detailSurface.configureDynamicWaters(dwActiveCfg,worldSeed,dwFocus,true,dwPreviewRadius,dwPinSet);
                     detailSurface.record(cmd,fi,local,graphSeeds,localDraw,detailRevision,nullptr,nullptr,true);
                     if(walkActive&&detailAuto&&local.meta.x>=129&&detailSurface.resolution==local.meta.x){   /* collision: a 129 x 129 window of the patch under the player (the whole 2048 patch took ~360 ms to read back) */
                         const uint32_t G=local.meta.x;const float spacing=local.domain.x/float(G-1);glm::vec2 here{walkPos.x,walkPos.z};
@@ -1292,48 +2358,492 @@ int main(int argc,char** argv){
                             TerrainParams window=local;window.meta.x=129;window.domain.x=spacing*128;window.domain.y=local.domain.y+(float(c.x)/float(G-1)-.5f)*local.domain.x;window.domain.z=local.domain.z+(float(c.y)/float(G-1)-.5f)*local.domain.x;
                             detailSurface.recordHeightCopy(cmd,fi,window,detailRevision,c-64,129);heightCopyRevision=detailRevision;patchWindowCenter={window.domain.y,window.domain.z};}}
                     if(middleActive){middleSurface.finerBand=&detailSurface;middleSurface.finerBandDraw=localDraw;}
-                    draw.focus={offset.x,offset.y,extent,-(middleActive?middlePrevious.domain.x*.5f:detailRenderRadius)};   /* the base hole matches the ring that is drawn (ring width slider) */renderDetail=true;
+                    glm::vec2 holeOffset=middleActive?glm::vec2(middlePrevious.domain.y,middlePrevious.domain.z)-originXZ:offset;
+                    draw.focus={holeOffset.x,holeOffset.y,extent,-(middleActive?middlePrevious.domain.x*.5f:detailRenderRadius)};   /* the base hole matches the ring that is drawn (ring width slider) */renderDetail=true;
                     if(detailAuto&&finerProgress<0&&(detailSurface.fieldRevision!=detailRevision||(middleActive&&middleSurface.fieldRevision!=middleRevision))){finerProgress=detailSurface.fieldRevision!=detailRevision?.75f:.9f;finerLabel="Finer detail: generating";}
+                    }
                 }catch(const std::exception& error){status=error.what();detailPlaced=false;}
             }
             overlay->PushClipRect(corner,{corner.x+size.x,corner.y+size.y},true);
-            auto projectWorld=[&](glm::vec3 world,ImVec2& pixel){auto clip=draw.vp*glm::vec4(world.x-params.domain.y,world.y*exaggeration,world.z-params.domain.z,1);if(clip.w<=0)return false;auto p=(glm::vec2(clip)/clip.w*.5f+.5f)*glm::vec2(size.x,size.y);pixel={corner.x+p.x,corner.y+p.y};return std::isfinite(pixel.x)&&std::isfinite(pixel.y);};
+            auto projectWorld=[&](glm::vec3 world,ImVec2& pixel){auto clip=unjitteredVP*glm::vec4(world.x-params.domain.y,world.y*exaggeration,world.z-params.domain.z,1);if(clip.w<=0)return false;auto p=(glm::vec2(clip)/clip.w*.5f+.5f)*glm::vec2(size.x,size.y);pixel={corner.x+p.x,corner.y+p.y};return std::isfinite(pixel.x)&&std::isfinite(pixel.y);};
             if(editor.document.loaded()&&(params.meta.z==5||params.meta.z==4||params.meta.z==2)){auto spawn=editor.document.spawn();float ground=0;ImVec2 p;if(sampleGround(spawn,ground)&&projectWorld({spawn.x,ground,spawn.y},p))drawPlayerIcon(overlay,p,1.5f,"Spawn");}
             if(walkActive){ImVec2 mid{corner.x+size.x*.5f,corner.y+size.y*.5f};overlay->AddLine({mid.x-9,mid.y},{mid.x+9,mid.y},IM_COL32(255,255,255,220),2);overlay->AddLine({mid.x,mid.y-9},{mid.x,mid.y+9},IM_COL32(255,255,255,220),2);
                 char line[200];std::snprintf(line,sizeof(line),"Walk  X %.1f  Y %.1f  Z %.1f  |  %s%s",walkPos.x,walkPos.y,walkPos.z,walkFlying?"flying":walkInWater?"swimming":walkOnGround?"on ground":"airborne",walkMouseCaptured?"":"  |  mouse released: click the view");
                 auto textSize=ImGui::CalcTextSize(line);ImVec2 at{corner.x+size.x*.5f-textSize.x*.5f,corner.y+size.y-46};overlay->AddRectFilled({at.x-8,at.y-4},{at.x+textSize.x+8,at.y+textSize.y+4},IM_COL32(11,19,25,225),6);overlay->AddText(at,IM_COL32(236,244,240,255),line);}
             for(int i=0;i<int(points.size());++i){auto& w=points[i];glm::vec3 position=w.p;float ground=0;if(sampleGround({w.p.x,w.p.z},ground))position.y=ground;ImVec2 p;if(projectWorld(position,p))drawPinIcon(overlay,p,w.color,11,w.name.c_str(),i==highlightedPoint);}
+            glm::vec3 camWorld(atmoEye.x+params.domain.y,atmoEye.y/std::max(0.001f,exaggeration),atmoEye.z+params.domain.z);
+            if((showStructures||rwConfig.enabled)&&!structureSets.empty()){
+                if(surface.fieldRevision!=0&&!surface.generationPending()&&(baseHeightCache.empty()||baseHeightRevision!=surface.fieldRevision)){
+                    baseHeightCache=surface.pickHeights();
+                    baseHeightRevision=surface.fieldRevision;
+                }
+                uint64_t showMask=0,rwTargetScanMask=0;
+                for(size_t si=0;si<structureSets.size()&&si<64;++si){
+                    if(structureSets[si].enabled)showMask|=(1ull<<si);
+                    if(rwConfig.enabled){
+                        const auto& sid=structureSets[si].shortId;
+                        bool landStruct=(sid!="mineshafts"&&sid!="strongholds"&&sid!="ancient_cities"&&sid!="trial_chambers"&&sid!="buried_treasures"&&sid!="ocean_monuments"&&sid!="ocean_ruins"&&sid!="shipwrecks");
+                        if(rwConfig.connectVillagesOnly){
+                            if(sid=="villages")rwTargetScanMask|=(1ull<<si);
+                        }else if(landStruct&&si<32&&((rwConfig.targetStructureMask&(1u<<si))!=0)){
+                            rwTargetScanMask|=(1ull<<si);
+                        }
+                    }
+                }
+                uint64_t mask=(showStructures?showMask:0ull)|(rwConfig.enabled?rwTargetScanMask:0ull);
+                glm::vec3 domKey(params.domain.x,params.domain.y,params.domain.z);
+                bool pinsUpdated=false;
+                if(mask==0ull){
+                    if(!structurePins.empty()){structurePins.clear();structurePinY.clear();structureCacheRev=0;structureCacheMask=0;}
+                }else if(surface.fieldRevision!=0&&!surface.generationPending()&&(structureCacheRev!=surface.fieldRevision||structureCacheMask!=mask||structureCacheSeed!=worldSeed||structureCacheDomain!=domKey)){
+                    auto rawBiomes=surface.readBiomes();
+                    if(rawBiomes.size()==size_t(surface.resolution)*surface.resolution){
+                        structurePins=mcstruct::findStructuresInDomain(structureSets,worldSeed,params.domain.y,params.domain.z,params.domain.x,surface.resolution,rawBiomes,structureBiomeTable,mask);
+                        structureCacheRev=surface.fieldRevision;structureCacheMask=mask;structureCacheSeed=worldSeed;structureCacheDomain=domKey;
+                        pinsUpdated=true;
+                    }
+                }
+                float seaLevel=graphSeeds.worldLevels.z;
+                if(pinsUpdated||structurePinYRev!=baseHeightRevision||structurePinY.size()!=structurePins.size()){
+                    structurePinY.resize(structurePins.size());
+                    for(size_t pi=0;pi<structurePins.size();++pi){
+                        const auto& pin=structurePins[pi];
+                        float gy=seaLevel;sampleGround({pin.worldX,pin.worldZ},gy);
+                        if(pin.setIndex>=0&&pin.setIndex<int(structureSets.size())){
+                            const auto& sid=structureSets[pin.setIndex].shortId;
+                            if(sid=="ocean_monuments"||sid=="ocean_ruins"||sid=="shipwrecks")gy=std::max(gy,seaLevel);
+                        }
+                        structurePinY[pi]=gy;
+                    }
+                    structurePinYRev=baseHeightRevision;
+                }
+                auto isWorldPointVisibleFast=[&](glm::vec3 wp,ImVec2* outSp=nullptr)->bool{
+                    ImVec2 sp;
+                    if(!projectWorld(wp,sp))return false;
+                    if(sp.x<corner.x-28.0f||sp.x>corner.x+size.x+28.0f||sp.y<corner.y-28.0f||sp.y>corner.y+size.y+28.0f)return false;
+                    if(distanceCulling&&glm::length(camWorld-wp)>cullDistance)return false;
+                    if(outSp)*outSp=sp;
+                    return true;
+                };
+                auto isWorldPointVisible=[&](glm::vec3 wp,ImVec2* outSp=nullptr)->bool{
+                    ImVec2 sp;
+                    if(!isWorldPointVisibleFast(wp,&sp))return false;
+                    float dist=glm::length(camWorld-wp);
+                    // Terrain occlusion culling via fast heightfield raymarch (medium/near range)
+                    if(!topDown&&!baseHeightCache.empty()&&dist>48.0f&&dist<4000.0f){
+                        constexpr int kSteps=5;
+                        for(int s=1;s<kSteps;++s){
+                            float t=0.12f+0.78f*(float(s)/float(kSteps));
+                            glm::vec3 rp=glm::mix(camWorld,wp,t);
+                            float gh=0.0f;
+                            if(sampleGround({rp.x,rp.z},gh)&&gh>rp.y+4.5f)return false;
+                        }
+                    }
+                    if(outSp)*outSp=sp;
+                    return true;
+                };
+                overlay->ChannelsSetCurrent(0);
+                if(rwConfig.enabled){
+                    uint64_t rwh=rwConfig.hash();
+                    glm::vec2 focusXZ(camWorld.x,camWorld.z);
+                    float focusMove=glm::length(focusXZ-rwCacheFocus);
+                    float focusThresh=std::max(1024.0f,params.domain.x*0.20f);
+                    if(surface.fieldRevision!=0&&!surface.generationPending()&&baseHeightRevision==surface.fieldRevision&&!baseHeightCache.empty()&&(pinsUpdated||rwCacheRev!=surface.fieldRevision||rwCacheHash!=rwh||rwCacheMask!=rwTargetScanMask||rwCacheSeed!=worldSeed||rwCacheDomain!=domKey||focusMove>focusThresh)){
+                        rwNetwork=roadweaver::buildRoadNetwork(rwConfig,structurePins,structureSets,seaLevel,params.domain.x,focusXZ,sampleRawGround);
+                        rwCacheRev=surface.fieldRevision;rwCacheHash=rwh;rwCacheMask=rwTargetScanMask;rwCacheSeed=worldSeed;rwCacheDomain=domKey;rwCacheFocus=focusXZ;
+                    }
+                    float rwMaxDist=distanceCulling?std::min(cullDistance,18000.0f):18000.0f;
+                    roadweaver::drawRoadWeaver(overlay,projectWorld,corner,{corner.x+size.x,corner.y+size.y},rwMaxDist,camWorld,rwConfig,rwNetwork,seaLevel);
+                }else if(!rwNetwork.roads.empty()){
+                    rwNetwork=roadweaver::RoadNetwork{};rwCacheRev=0;
+                }
+                if(showStructures){
+                    int hoveredStruct=-1;float bestDist2=144.0f;ImVec2 hoveredSp{};
+                    bool drawModels=(structureDisplayMode==1||structureDisplayMode==2);
+                    bool drawIcons=(structureDisplayMode==0||structureDisplayMode==2);
+                    static uint32_t cellStamp[256*256]{};static uint32_t frameStamp=1;
+                    if(++frameStamp==0){std::fill(std::begin(cellStamp),std::end(cellStamp),0);frameStamp=1;}
+                    bool thinDense=(structurePins.size()>500);
+                    struct VisPin{float dist;int pi;glm::vec3 wp;ImVec2 sp;};
+                    std::vector<VisPin> visPins;visPins.reserve(structurePins.size());
+                    for(int pi=0;pi<int(structurePins.size());++pi){
+                        const auto& pin=structurePins[pi];
+                        if(pin.setIndex<0||pin.setIndex>=int(structureSets.size()))continue;
+                        if(!structureSets[pin.setIndex].enabled)continue;
+                        float gy=structurePinY[pi];
+                        glm::vec3 wp{pin.worldX,gy,pin.worldZ};
+                        ImVec2 sp;
+                        if(!isWorldPointVisible(wp,&sp))continue;
+                        if(thinDense){
+                            int cx=int((sp.x-corner.x)/6.0f)&255;
+                            int cy=int((sp.y-corner.y)/6.0f)&255;
+                            uint32_t& stamp=cellStamp[(cy<<8)|cx];
+                            if(stamp==frameStamp)continue;
+                            stamp=frameStamp;
+                        }
+                        visPins.push_back({glm::length(camWorld-wp),pi,wp,sp});
+                    }
+                    if(drawModels&&visPins.size()>1){
+                        std::sort(visPins.begin(),visPins.end(),[](const VisPin& a,const VisPin& b){return a.dist<b.dist;});
+                    }
+                    int modelsDrawn=0;
+                    for(const auto& vpItem:visPins){
+                        if(overlay->VtxBuffer.Size>54000)break;
+                        const auto& pin=structurePins[vpItem.pi];
+                        const auto& set=structureSets[pin.setIndex];
+                        float iconR=std::clamp(7.5f-vpItem.dist*0.00018f,3.0f,7.5f);
+                        if(drawModels&&modelsDrawn<120&&overlay->VtxBuffer.Size<48000){mcstruct::drawStructureModel3D(overlay,projectWorld,camWorld,vpItem.wp,set.shortId,set.colorRgb,pin.variantName,sampleRawGround);++modelsDrawn;}
+                        if(drawIcons)mcstruct::drawStructureIcon(overlay,vpItem.sp,set.shortId,set.colorRgb,iconR);
+                        if(structureLabels&&vpItem.dist<14000.0f){
+                            float lsz=ImGui::GetFontSize()*0.78f;
+                            auto ts=ImGui::GetFont()->CalcTextSizeA(lsz,FLT_MAX,0.0f,set.name.c_str());
+                            ImVec2 tp{vpItem.sp.x-ts.x*.5f,vpItem.sp.y-iconR-3.0f-ts.y};
+                            overlay->AddRectFilled({tp.x-2.5f,tp.y-1.0f},{tp.x+ts.x+2.5f,tp.y+ts.y+1.0f},IM_COL32(10,15,20,195),2.5f);
+                            overlay->AddText(ImGui::GetFont(),lsz,tp,IM_COL32(240,245,248,255),set.name.c_str());
+                        }
+                        float dx=io.MousePos.x-vpItem.sp.x,dy=io.MousePos.y-vpItem.sp.y,d2=dx*dx+dy*dy;
+                        if(d2<bestDist2){bestDist2=d2;hoveredStruct=vpItem.pi;hoveredSp=vpItem.sp;}
+                    }
+                    overlay->ChannelsSetCurrent(1);
+                    if(hoveredStruct>=0){
+                        const auto& pin=structurePins[hoveredStruct];
+                        const auto& set=structureSets[pin.setIndex];
+                        char buf[160];std::snprintf(buf,sizeof(buf),"%s\n%s\nX %.0f, Z %.0f",set.name.c_str(),pin.variantName.c_str(),pin.worldX,pin.worldZ);
+                        auto ts=ImGui::CalcTextSize(buf);
+                        ImVec2 tp{hoveredSp.x+12.0f,hoveredSp.y-ts.y*.5f};
+                        tp.x=std::clamp(tp.x,corner.x+8.0f,std::max(corner.x+8.0f,corner.x+size.x-ts.x-10.0f));
+                        tp.y=std::clamp(tp.y,corner.y+8.0f,std::max(corner.y+8.0f,corner.y+size.y-ts.y-10.0f));
+                        overlay->AddRectFilled({tp.x-6,tp.y-4},{tp.x+ts.x+6,tp.y+ts.y+4},IM_COL32(10,15,20,235),4.0f);
+                        overlay->AddRect({tp.x-6,tp.y-4},{tp.x+ts.x+6,tp.y+ts.y+4},IM_COL32((set.colorRgb>>16)&255,(set.colorRgb>>8)&255,set.colorRgb&255,220),4.0f,0,1.2f);
+                        overlay->AddText(tp,IM_COL32(242,247,250,255),buf);
+                    }
+                }
+                overlay->ChannelsSetCurrent(1);
+            }else if(!structurePins.empty()||!rwNetwork.roads.empty()){
+                structurePins.clear();structurePinY.clear();structureCacheRev=0;rwNetwork=roadweaver::RoadNetwork{};rwCacheRev=0;
+            }
             if(elapsed-copiedAt<1.6&&!copiedText.empty()){std::string text="Copied "+copiedText;ImVec2 at{io.MousePos.x+16,io.MousePos.y+14},extentText=ImGui::CalcTextSize(text.c_str());overlay->AddRectFilled({at.x-6,at.y-4},{at.x+extentText.x+6,at.y+extentText.y+4},IM_COL32(11,19,25,230),5);overlay->AddText(at,IM_COL32(120,230,160,255),text.c_str());}
+            if(dwCfg.enabled&&surface.fieldRevision){
+                const glm::vec2 dwOverlayCenter=dwFocus;
+                const float r=float(std::clamp(dwPreviewRadius,1,131072));
+                const bool emphasize=dwTool||dwPinSet;
+                const ImU32 ringOutline=emphasize?IM_COL32(12,44,62,190):IM_COL32(12,44,62,115);
+                const ImU32 ringCol=emphasize?IM_COL32(72,222,255,235):IM_COL32(72,222,255,145);
+                constexpr int kRingSegments=72;
+                const bool needRingRebuild=!dwRingValid||dwRingCache.size()!=kRingSegments+1||dwRingKeyRadius!=dwPreviewRadius||dwRingKeyRev!=surface.fieldRevision||dwRingKeyPickRev!=baseHeightRevision||dwRingKeyOcean!=showOceanFloor||dwRingKeySea!=graphSeeds.worldLevels.z||glm::length(dwOverlayCenter-dwRingKeyCenter)>0.5f;
+                if(needRingRebuild){
+                    auto fastGround=[&](glm::vec2 wp)->float{
+                        float gy=graphSeeds.worldLevels.z;
+                        if(baseHeightCache.size()==129*129){
+                            glm::vec2 uv=(wp-glm::vec2(params.domain.y,params.domain.z))/extent+.5f;
+                            if(uv.x>=0.0f&&uv.x<=1.0f&&uv.y>=0.0f&&uv.y<=1.0f){
+                                glm::vec2 q=uv*128.0f;int x=std::min(127,int(q.x)),z=std::min(127,int(q.y));float a=q.x-x,b=q.y-z;
+                                gy=std::lerp(std::lerp(baseHeightCache[z*129+x],baseHeightCache[z*129+x+1],a),std::lerp(baseHeightCache[(z+1)*129+x],baseHeightCache[(z+1)*129+x+1],a),b);
+                                if(!showOceanFloor)gy=std::max(gy,params.land.z);
+                            }
+                        }
+                        return gy;
+                    };
+                    dwRingCache.resize(kRingSegments+1);
+                    for(int s=0;s<=kRingSegments;++s){
+                        float ang=float(s)/float(kRingSegments)*6.283185307f;
+                        glm::vec2 wp=dwOverlayCenter+glm::vec2(std::cos(ang),std::sin(ang))*r;
+                        dwRingCache[s]={wp.x,fastGround(wp)+2.0f,wp.y};
+                    }
+                    dwCenterCache={dwOverlayCenter.x,fastGround(dwOverlayCenter)+2.0f,dwOverlayCenter.y};
+                    dwRingKeyCenter=dwOverlayCenter;dwRingKeyRadius=dwPreviewRadius;dwRingKeyRev=surface.fieldRevision;dwRingKeyPickRev=baseHeightRevision;dwRingKeyOcean=showOceanFloor;dwRingKeySea=graphSeeds.worldLevels.z;
+                    dwRingValid=true;
+                }
+                ImVec2 prevRing{};bool havePrevRing=false;
+                for(const glm::vec3& pt:dwRingCache){
+                    ImVec2 sp;
+                    if(projectWorld(pt,sp)){
+                        if(havePrevRing&&(std::abs(prevRing.x-sp.x)<size.x*1.5f&&std::abs(prevRing.y-sp.y)<size.y*1.5f)){
+                            overlay->AddLine(prevRing,sp,ringOutline,emphasize?4.2f:3.0f);
+                            overlay->AddLine(prevRing,sp,ringCol,emphasize?2.1f:1.3f);
+                        }
+                        prevRing=sp;havePrevRing=true;
+                    }else havePrevRing=false;
+                }
+                ImVec2 cp;
+                if(projectWorld(dwCenterCache,cp)){
+                    overlay->AddCircleFilled(cp,dwPinSet?6.5f:4.5f,IM_COL32(72,222,255,245));
+                    overlay->AddCircle(cp,dwPinSet?7.5f:5.5f,IM_COL32(12,32,48,245),0,2.0f);
+                    if(dwPinSet||dwTool){
+                        char lbl[96];
+                        std::snprintf(lbl,sizeof(lbl),dwPinSet?"DW Focus (%.0f, %.0f) | r=%d":"DW Auto (%.0f, %.0f) | r=%d",dwOverlayCenter.x,dwOverlayCenter.y,dwPreviewRadius);
+                        auto ts=ImGui::CalcTextSize(lbl);
+                        ImVec2 tp{cp.x+10.0f,cp.y-ts.y*.5f};
+                        overlay->AddRectFilled({tp.x-6,tp.y-3},{tp.x+ts.x+6,tp.y+ts.y+3},IM_COL32(10,19,28,220),4.0f);
+                        overlay->AddRect({tp.x-6,tp.y-3},{tp.x+ts.x+6,tp.y+ts.y+3},IM_COL32(72,222,255,210),4.0f);
+                        overlay->AddText(tp,IM_COL32(215,246,255,255),lbl);
+                    }
+                }
+            }
             if(!measurePoints.empty()){
-                ImVec2 last{};bool haveLast=false;for(size_t i=0;i<measurePoints.size();++i){ImVec2 p;if(projectWorld(measurePoints[i],p)){if(haveLast)overlay->AddLine(last,p,IM_COL32(255,215,80,255),2.5f);overlay->AddCircleFilled(p,4,IM_COL32(255,235,150,255));char n[24];std::snprintf(n,sizeof(n),"%zu",i+1);overlay->AddText({p.x+7,p.y-14},IM_COL32(255,240,200,255),n);last=p;haveLast=true;}else haveLast=false;}
-                ImVec2 card{corner.x+14,corner.y+size.y-139};overlay->AddRectFilled(card,{card.x+420,card.y+126},IM_COL32(11,19,25,238),7);char text[160];float y=card.y+10;std::snprintf(text,sizeof(text),"Measure [M] | %zu points | blocks (~metres)",measurePoints.size());overlay->AddText({card.x+12,y},IM_COL32(255,225,132,255),text);y+=22;
-                for(auto entry:{std::pair<const char*,double>{"Horizontal",measureHorizontal},{"Direct 3D",measureDirect},{"Surface (sampled)",measureSurface}}){std::snprintf(text,sizeof(text),"%s: %.2f",entry.first,entry.second);overlay->AddText({card.x+12,y},IM_COL32(216,234,228,255),text);y+=20;}overlay->AddText({card.x+12,y},IM_COL32(148,181,172,255),"Backspace: remove last | Enter: finish | Clear: right panel");
+                auto fmtDist=[&](double blocks,char* buf,size_t n){
+                    if(measureUnit==1)std::snprintf(buf,n,"%.2f ch",blocks/16.0);
+                    else if(measureUnit==2)std::snprintf(buf,n,"%.3f km",blocks/1000.0);
+                    else std::snprintf(buf,n,"%.1f m",blocks);
+                };
+                auto fmtArea=[&](double sqBlocks,char* buf,size_t n){
+                    if(measureUnit==1)std::snprintf(buf,n,"%.2f ch^2",sqBlocks/256.0);
+                    else if(measureUnit==2)std::snprintf(buf,n,"%.4f km^2",sqBlocks/1000000.0);
+                    else std::snprintf(buf,n,"%.0f m^2",sqBlocks);
+                };
+                auto drawTerrainSegment=[&](glm::vec3 a,glm::vec3 b,ImU32 col,float thickness){
+                    float dist=glm::length(glm::vec2(b.x-a.x,b.z-a.z));
+                    int steps=measureFollowTerrain?std::clamp(int(std::ceil(dist/24.0f)),1,48):1;
+                    ImVec2 prev{};bool havePrev=false;
+                    for(int s=0;s<=steps;++s){
+                        float t=float(s)/float(steps);
+                        glm::vec3 pt=glm::mix(a,b,t);
+                        if(measureFollowTerrain&&s>0&&s<steps){float gy=pt.y;if(sampleGround({pt.x,pt.z},gy))pt.y=gy;}
+                        ImVec2 sp;
+                        if(projectWorld(pt,sp)){
+                            if(havePrev)overlay->AddLine(prev,sp,col,thickness);
+                            prev=sp;havePrev=true;
+                        }else havePrev=false;
+                    }
+                };
+
+                // Polygon / Circle fill + perimeter
+                if(measureMode==1&&measurePoints.size()>=3){
+                    std::vector<ImVec2> poly;poly.reserve(measurePoints.size());
+                    for(auto& pt:measurePoints){ImVec2 sp;if(projectWorld(pt,sp))poly.push_back(sp);}
+                    if(poly.size()>=3)overlay->AddConvexPolyFilled(poly.data(),int(poly.size()),IM_COL32(255,205,70,42));
+                    for(size_t i=0;i<measurePoints.size();++i){
+                        auto a=measurePoints[i],b=measurePoints[(i+1)%measurePoints.size()];
+                        drawTerrainSegment(a,b,IM_COL32(255,215,80,255),2.5f);
+                    }
+                }else if(measureMode==2&&measurePoints.size()>=2){
+                    glm::vec3 c=measurePoints[0],e=measurePoints[1];
+                    float r=glm::length(glm::vec2(e.x-c.x,e.z-c.z));
+                    const int segs=48;
+                    std::vector<glm::vec3> ring;ring.reserve(segs);
+                    std::vector<ImVec2> poly;poly.reserve(segs);
+                    for(int i=0;i<segs;++i){
+                        float ang=float(i)/float(segs)*6.2831853f;
+                        glm::vec3 pt{c.x+std::cos(ang)*r,c.y,c.z+std::sin(ang)*r};
+                        float gy=pt.y;if(measureFollowTerrain&&sampleGround({pt.x,pt.z},gy))pt.y=gy;
+                        ring.push_back(pt);
+                        ImVec2 sp;if(projectWorld(pt,sp))poly.push_back(sp);
+                    }
+                    if(poly.size()>=3)overlay->AddConvexPolyFilled(poly.data(),int(poly.size()),IM_COL32(80,210,255,36));
+                    for(int i=0;i<segs;++i){
+                        ImVec2 p0,p1;
+                        if(projectWorld(ring[i],p0)&&projectWorld(ring[(i+1)%segs],p1))
+                            overlay->AddLine(p0,p1,IM_COL32(95,220,255,255),2.5f);
+                    }
+                    drawTerrainSegment(c,e,IM_COL32(255,215,80,245),2.2f);
+                }else{
+                    for(size_t i=0;i+1<measurePoints.size();++i)
+                        drawTerrainSegment(measurePoints[i],measurePoints[i+1],IM_COL32(255,215,80,255),2.5f);
+                }
+
+                // Segment length badges (for <= 10 segments)
+                size_t badgeSegs=(measureMode==1&&measurePoints.size()>=3)?measurePoints.size():(measurePoints.size()>1?measurePoints.size()-1:0);
+                if(badgeSegs>0&&badgeSegs<=10&&measureMode!=2){
+                    for(size_t i=0;i<badgeSegs;++i){
+                        auto a=measurePoints[i],b=measurePoints[(i+1)%measurePoints.size()];
+                        glm::vec3 mid=(a+b)*0.5f;float gy=mid.y;if(measureFollowTerrain&&sampleGround({mid.x,mid.z},gy))mid.y=gy;
+                        ImVec2 p0,p1,pm;
+                        if(projectWorld(a,p0)&&projectWorld(b,p1)&&projectWorld(mid,pm)){
+                            float pxLen=std::hypot(p1.x-p0.x,p1.y-p0.y);
+                            if(pxLen>52.0f){
+                                char dbuf[32];fmtDist(glm::length(glm::vec2(b.x-a.x,b.z-a.z)),dbuf,sizeof(dbuf));
+                                ImVec2 ts=ImGui::CalcTextSize(dbuf);
+                                overlay->AddRectFilled({pm.x-ts.x*.5f-4,pm.y-ts.y*.5f-2},{pm.x+ts.x*.5f+4,pm.y+ts.y*.5f+2},IM_COL32(11,19,25,210),4);
+                                overlay->AddText({pm.x-ts.x*.5f,pm.y-ts.y*.5f},IM_COL32(255,235,165,255),dbuf);
+                            }
+                        }
+                    }
+                }
+
+                // Live rubber-band preview line to cursor
+                if(measureTool&&measureHasCursor&&!measurePoints.empty()){
+                    glm::vec3 anchor=(measureMode==2)?measurePoints[0]:measurePoints.back();
+                    drawTerrainSegment(anchor,measureCursorWorld,IM_COL32(255,225,120,160),1.8f);
+                    double hd=glm::length(glm::vec2(measureCursorWorld.x-anchor.x,measureCursorWorld.z-anchor.z));
+                    double brg=std::atan2(double(measureCursorWorld.x-anchor.x),double(-(measureCursorWorld.z-anchor.z)))*180.0/3.14159265358979323846;
+                    if(brg<0)brg+=360.0;
+                    char pbuf[64],dbuf[32];fmtDist(hd,dbuf,sizeof(dbuf));
+                    std::snprintf(pbuf,sizeof(pbuf),"+%s | %.0f deg",dbuf,brg);
+                    ImVec2 ts=ImGui::CalcTextSize(pbuf);
+                    ImVec2 tip{io.MousePos.x+14,io.MousePos.y-24};
+                    overlay->AddRectFilled({tip.x-5,tip.y-3},{tip.x+ts.x+5,tip.y+ts.y+3},IM_COL32(11,19,25,225),4);
+                    overlay->AddText(tip,IM_COL32(255,235,165,255),pbuf);
+                }
+
+                // Vertex handles
+                for(size_t i=0;i<measurePoints.size();++i){
+                    ImVec2 p;
+                    if(projectWorld(measurePoints[i],p)){
+                        bool active=(int(i)==measureHoverVertex||int(i)==measureDragIndex);
+                        float rad=active?6.5f:4.5f;
+                        if(active)overlay->AddCircle(p,rad+3.0f,IM_COL32(255,255,255,220),16,1.8f);
+                        overlay->AddCircleFilled(p,rad,active?IM_COL32(255,255,190,255):IM_COL32(255,220,110,255));
+                        overlay->AddCircle(p,rad,IM_COL32(25,25,25,220),12,1.2f);
+                        char n[24];std::snprintf(n,sizeof(n),"%zu",i+1);
+                        overlay->AddText({p.x+8,p.y-15},IM_COL32(255,244,210,255),n);
+                    }
+                }
+
+                // Profile hover marker on 3D terrain
+                if(measureProfileHover>=0&&measureProfileHover<int(measureProfile.size())){
+                    ImVec2 hp;
+                    if(projectWorld(measureProfile[measureProfileHover].world,hp)){
+                        overlay->AddCircleFilled(hp,5.5f,IM_COL32(80,235,255,255));
+                        overlay->AddCircle(hp,8.0f,IM_COL32(255,255,255,230),16,1.5f);
+                    }
+                }
+
+                // Google Earth-style bottom-left Measure Card + Elevation Profile
+                bool showGraph=measureShowProfile&&measureProfile.size()>=2;
+                float cardW=450.0f;
+                float cardH=showGraph?232.0f:148.0f;
+                ImVec2 card{corner.x+14,std::max(corner.y+14,corner.y+size.y-cardH-13)};
+                overlay->AddRectFilled(card,{card.x+cardW,card.y+cardH},IM_COL32(11,19,25,240),8);
+                overlay->AddRect(card,{card.x+cardW,card.y+cardH},IM_COL32(72,112,118,160),8);
+
+                const char* modeLabel=(measureMode==1)?"Polygon":(measureMode==2)?"Circle":"Path";
+                char text[192],d1[32],d2[32],d3[32],a1[32];
+                float y=card.y+10;
+                std::snprintf(text,sizeof(text),"Measure [M] | %s | %zu pt%s",modeLabel,measurePoints.size(),measurePoints.size()==1?"":"s");
+                overlay->AddText({card.x+12,y},IM_COL32(255,225,132,255),text);y+=20;
+
+                if(measureMode==2){
+                    fmtDist(measureHorizontal,d1,sizeof(d1));fmtDist(measurePerimeter,d2,sizeof(d2));fmtArea(measureArea,a1,sizeof(a1));
+                    std::snprintf(text,sizeof(text),"Radius: %s   |   Circumference: %s",d1,d2);
+                    overlay->AddText({card.x+12,y},IM_COL32(216,234,228,255),text);y+=19;
+                    std::snprintf(text,sizeof(text),"Area: %s   |   Bearing: %.1f deg",a1,measureHeading);
+                    overlay->AddText({card.x+12,y},IM_COL32(216,234,228,255),text);y+=19;
+                }else if(measureMode==1){
+                    fmtDist(measurePerimeter,d1,sizeof(d1));fmtDist(measureSurface,d2,sizeof(d2));fmtArea(measureArea,a1,sizeof(a1));
+                    std::snprintf(text,sizeof(text),"Perimeter: %s   |   Surface: %s",d1,d2);
+                    overlay->AddText({card.x+12,y},IM_COL32(216,234,228,255),text);y+=19;
+                    std::snprintf(text,sizeof(text),"Area: %s   |   Last heading: %.1f deg",a1,measureHeading);
+                    overlay->AddText({card.x+12,y},IM_COL32(216,234,228,255),text);y+=19;
+                }else{
+                    fmtDist(measureHorizontal,d1,sizeof(d1));fmtDist(measureDirect,d2,sizeof(d2));fmtDist(measureSurface,d3,sizeof(d3));
+                    std::snprintf(text,sizeof(text),"Ground: %s   |   3D: %s   |   Surface: %s",d1,d2,d3);
+                    overlay->AddText({card.x+12,y},IM_COL32(216,234,228,255),text);y+=19;
+                    std::snprintf(text,sizeof(text),"Bearing: %.1f deg   |   Max slope: %.1f deg",measureHeading,measureMaxSlopeDeg);
+                    overlay->AddText({card.x+12,y},IM_COL32(216,234,228,255),text);y+=19;
+                }
+
+                std::snprintf(text,sizeof(text),"Elev min/max: %.0f / %.0f   |   Gain: +%.0f   Loss: -%.0f",measureMinY,measureMaxY,measureGain,measureLoss);
+                overlay->AddText({card.x+12,y},IM_COL32(174,218,210,255),text);y+=20;
+
+                if(showGraph){
+                    ImVec2 g0{card.x+12,y+2},g1{card.x+cardW-12,y+76};
+                    overlay->AddRectFilled(g0,g1,IM_COL32(7,13,18,235),4);
+                    overlay->AddRect(g0,g1,IM_COL32(55,88,96,170),4);
+                    float minY=measureMinY-2.0f,maxY=std::max(minY+4.0f,measureMaxY+2.0f);
+                    float maxD=std::max(1.0f,measureProfile.back().dist);
+                    float gw=g1.x-g0.x-4.0f,gh=g1.y-g0.y-6.0f;
+
+                    measureProfileHover=-1;
+                    if(io.MousePos.x>=g0.x&&io.MousePos.x<=g1.x&&io.MousePos.y>=g0.y&&io.MousePos.y<=g1.y){
+                        float targetD=std::clamp((io.MousePos.x-(g0.x+2.0f))/gw,0.0f,1.0f)*maxD;
+                        float bestDiff=1e9f;
+                        for(int i=0;i<int(measureProfile.size());++i){
+                            float diff=std::abs(measureProfile[i].dist-targetD);
+                            if(diff<bestDiff){bestDiff=diff;measureProfileHover=i;}
+                        }
+                    }
+
+                    ImVec2 prev{};
+                    for(size_t i=0;i<measureProfile.size();++i){
+                        float nx=measureProfile[i].dist/maxD;
+                        float ny=(measureProfile[i].y-minY)/(maxY-minY);
+                        ImVec2 pt{g0.x+2.0f+nx*gw,g1.y-3.0f-ny*gh};
+                        if(i>0){
+                            ImVec2 q[4]={prev,pt,{pt.x,g1.y-2.0f},{prev.x,g1.y-2.0f}};
+                            overlay->AddQuadFilled(q[0],q[1],q[2],q[3],IM_COL32(255,205,70,45));
+                            overlay->AddLine(prev,pt,IM_COL32(255,215,90,255),2.0f);
+                        }
+                        prev=pt;
+                    }
+                    if(measureProfileHover>=0){
+                        auto& s=measureProfile[measureProfileHover];
+                        float nx=s.dist/maxD,ny=(s.y-minY)/(maxY-minY);
+                        ImVec2 pt{g0.x+2.0f+nx*gw,g1.y-3.0f-ny*gh};
+                        overlay->AddLine({pt.x,g0.y},{pt.x,g1.y},IM_COL32(80,235,255,180),1.0f);
+                        overlay->AddCircleFilled(pt,3.5f,IM_COL32(80,235,255,255));
+                        char hbuf[64];fmtDist(s.dist,d1,sizeof(d1));
+                        std::snprintf(hbuf,sizeof(hbuf),"%s | Y=%.1f",d1,s.y);
+                        overlay->AddText({g0.x+6,g0.y+3},IM_COL32(130,240,255,255),hbuf);
+                    }
+                    y=g1.y+8;
+                }
+                overlay->AddText({card.x+12,y},IM_COL32(148,181,172,255),"Drag vertex | Backspace: undo | Del: clear | Dbl-click/Enter: finish");
             }
             if(editor.highlightTerrain||editor.isolateTerrain){char text[128];std::snprintf(text,sizeof(text),"Terrain filter: %s | %s | view only",terrainTypeName(editor.terrainSelection),editor.isolateTerrain?"isolated":"highlighted");overlay->AddText({corner.x+80,corner.y+145},IM_COL32(255,207,93,255),text);}
             overlay->PopClipRect();
-            toolHint=walkPickTool?"Walk: click the terrain where you want to drop in | Esc cancel":copyTool?"Copy coordinates [K]: LMB copy X Y Z of the clicked spot | MMB orbit | RMB pan | Esc navigate":pointTool?"Points [B]: LMB pin a point | click a name in the right panel to centre on it | MMB orbit | Esc navigate":displayPopupActive?"Viewport display: Z layers | Shift+Z biome and block colours | L six-band LOD | Esc close":detailTool?"High detail [H]: LMB place/move | Ctrl+wheel world radius | H disable | Shift+H settings | MMB orbit | R reset":spawnTool?"Set spawn [P]: LMB place preset spawn | MMB orbit | RMB pan | Esc navigate":measureTool?"Measure [M]: LMB add point | Backspace remove | Enter finish | Clear: right panel | MMB orbit":centerTool?"Center camera [C]: LMB set orbit center | MMB orbit | RMB pan | Wheel zoom | R reset":"Navigate [Esc]: LMB/MMB orbit | RMB pan | Ctrl+Shift+RMB turn sun | Wheel zoom | C center | P spawn | M measure | B points | Ctrl+Z undo | Ctrl+Shift+Z redo | R reset";
+            overlay->ChannelsMerge();
+            toolHint=walkPickTool?"Walk: click the terrain where you want to drop in | Esc cancel":dwTool?"Dynamic Waters focus [U]: LMB set preview center point | MMB orbit | RMB pan | Esc navigate":copyTool?"Copy coordinates [K]: LMB copy X Y Z of the clicked spot | MMB orbit | RMB pan | Esc navigate":pointTool?"Points [B]: LMB pin a point | click a name in the right panel to centre on it | MMB orbit | Esc navigate":displayPopupActive?"Viewport display: Z layers | Shift+Z biome and block colours | L six-band LOD | Esc close":detailTool?"High detail [H]: LMB place/move | Ctrl+wheel world radius | H disable | Shift+H settings | MMB orbit | R reset":spawnTool?"Set spawn [P]: LMB place preset spawn | MMB orbit | RMB pan | Esc navigate":measureTool?"Measure [M]: LMB add point | Backspace remove | Enter finish | Clear: right panel | MMB orbit":centerTool?"Center camera [C]: LMB set orbit center | MMB orbit | RMB pan | Wheel zoom | R reset":"Navigate [Esc]: LMB/MMB orbit | RMB pan | Ctrl+Shift+RMB turn sun | Wheel zoom | C center | P spawn | M measure | B points | U water focus | Ctrl+Z undo | Ctrl+Shift+Z redo | R reset";
             if(walkActive){toolHint=walkMouseCaptured?"Walk [G]: WASD move | Space jump (double-tap: fly) | Ctrl sprint | Shift sneak/down | mouse look | Ctrl+Z undo, Ctrl+S save | Esc or G exit":"Walk [G]: mouse released - click the view to look again | Esc or G exit";}
             else if(flyActive){char t[300];std::snprintf(t,sizeof(t),"Fly camera [F]: RMB look | WASD move | Q/E down/up | Wheel speed (%.0f blocks/s) | Shift fast, Ctrl slow | Ctrl+Z undo, Ctrl+S save | Esc or F exit",flySpeed);toolHint=t;}
             ImGui::SetNextWindowPos({vp->Pos.x,vp->Pos.y+vp->Size.y-28});ImGui::SetNextWindowSize({vp->Size.x,28});ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{12,4});ImGui::Begin("Tool shortcut hints",nullptr,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoSavedSettings);ImGui::TextUnformatted(toolHint.c_str());ImGui::End();ImGui::PopStyleVar();
             surface.frustumCull=frustumCulling;surface.distanceCull=distanceCulling;surface.maxDrawDistance=std::max(1.0f,cullDistance);surface.backfaceCull=backfaceCulling;
             renderedThisFrame=surface.resolution;
             editPreview.hold=backJob&&finerDragMode==0;   /* close bands first: the full-resolution base refinement waits for the finer job */
-            editPreview.worker.profileSteps=surface.profileSteps;editPreview.worker.biomeBandGroups=options.biomeBand;editPreview.record(cmd,fi,draw);
-            if(walkActive&&surface.fieldRevision&&params.meta.x>=65&&surface.resolution==params.meta.x){   // keep a 65 x 65 window of the whole-world grid under the player for collision
+            editPreview.worker.profileSteps=surface.profileSteps;editPreview.worker.biomeBandGroups=options.biomeBand;
+            if(hasPresetScene)editPreview.record(cmd,fi,draw);
+            if(hasPresetScene&&walkActive&&surface.fieldRevision&&params.meta.x>=65&&surface.resolution==params.meta.x){   // keep a 65 x 65 window of the whole-world grid under the player for collision
                 const uint32_t G=params.meta.x;const float spacing=params.domain.x/float(G-1);glm::vec2 here{walkPos.x,walkPos.z};
                 if(surface.fieldRevision!=baseWalkFieldRevision||glm::length(here-baseWalkCenter)>spacing*12){
                     glm::vec2 uv=(here-glm::vec2(params.domain.y,params.domain.z))/params.domain.x+.5f;glm::ivec2 c=glm::clamp(glm::ivec2(glm::round(uv*float(G-1))),glm::ivec2(32),glm::ivec2(int(G)-33));
                     TerrainParams window=params;window.meta.x=65;window.domain.x=spacing*64;window.domain.y=params.domain.y+(float(c.x)/float(G-1)-.5f)*params.domain.x;window.domain.z=params.domain.z+(float(c.y)/float(G-1)-.5f)*params.domain.x;
                     surface.recordHeightCopy(cmd,fi,window,++baseWalkCopies,c-32,65);baseWalkFieldRevision=surface.fieldRevision;baseWalkCenter={window.domain.y,window.domain.z};}}
-            surface.record(cmd,fi,params,graphSeeds,draw,revision,renderDetail?(middleActive?&middleSurface:&detailSurface):nullptr,renderDetail?(middleActive?&middleDraw:&localDraw):nullptr);renderSnapshot.restore();ImGui::Render();gpu.end(ImGui::GetDrawData());lastSubmitted=fi;
+            surface.record(cmd,fi,params,graphSeeds,draw,hasPresetScene?revision:0ull,(hasPresetScene&&renderDetail)?(middleActive?&middleSurface:&detailSurface):nullptr,(hasPresetScene&&renderDetail)?(middleActive?&middleDraw:&localDraw):nullptr);
+            if(hasPresetScene&&surface.fieldRevision&&pendingPickRevision!=surface.fieldRevision){surface.recordPickHeights(cmd,fi,surface.fieldRevision);pendingPickRevision=surface.fieldRevision;}
+            renderSnapshot.restore();ImGui::Render();gpu.end(ImGui::GetDrawData());lastSubmitted=fi;
             if(swapReady&&backJob){   /* the background patch and ring are complete: swap them in (bindings travel with the descriptor sets) */
-                if(!detailInitialized){detailSurface.initialize(&surface);detailInitialized=true;}if(backKey.midActive&&!middleInitialized){middleSurface.initialize(&surface);middleInitialized=true;}   /* a never-initialized front would hand the back surface null buffers (crash in the next background job) */
-                detailSurface.exchangeTerrain(detailBack);if(backKey.midActive)middleSurface.exchangeTerrain(middleBack);
-                frontKey=backKey;frontFull=true;backJob=swapReady=false;if(finerJobs.size()<64)finerJobs.push_back({{"seconds",elapsed-finerJobStart},{"frames",frameNumber-finerJobFrame},{"grid",backKey.local.meta.x},{"ring",backKey.midActive?backKey.mid.meta.x:0u}});detailRevision=detailSurface.fieldRevision;previousDetail=frontKey.local;detailBaseRevision=frontKey.base;
-                if(frontKey.midActive){middleRevision=middleSurface.fieldRevision;middlePrevious=frontKey.mid;middleBaseRevision=frontKey.base;middleBoundGrid=surface.resolution;boundCoarseGrid=middleSurface.resolution;}else{middleBoundGrid=0;boundCoarseGrid=surface.resolution;}
+                if(!detailInitialized){detailSurface.initialize(&surface);detailInitialized=true;}if(backKey.midActive&&!backKey.midReused&&!middleInitialized){middleSurface.initialize(&surface);middleInitialized=true;}   /* a never-initialized front would hand the back surface null buffers (crash in the next background job) */
+                detailSurface.exchangeTerrain(detailBack);if(backKey.midActive&&!backKey.midReused)middleSurface.exchangeTerrain(middleBack);
+                if(detailSurface.resolution&&detailSurface.frames.size()!=gpu.swap.ImageCount)detailSurface.ensure(detailSurface.resolution,1,1);
+                if(backKey.midActive&&!backKey.midReused&&middleSurface.resolution&&middleSurface.frames.size()!=gpu.swap.ImageCount)middleSurface.ensure(middleSurface.resolution,1,1);
+                frontKey=backKey;frontFull=true;backJob=swapReady=false;if(finerJobs.size()<64)finerJobs.push_back({{"seconds",elapsed-finerJobStart},{"frames",frameNumber-finerJobFrame},{"grid",backKey.local.meta.x},{"ring",(backKey.midActive&&!backKey.midReused)?backKey.mid.meta.x:0u}});detailRevision=detailSurface.fieldRevision;previousDetail=frontKey.local;detailBaseRevision=frontKey.base;
+                if(frontKey.midActive){if(!frontKey.midReused){middleRevision=middleSurface.fieldRevision;middlePrevious=frontKey.mid;middleBaseRevision=frontKey.base;}middleBoundGrid=surface.resolution;boundCoarseGrid=middleSurface.resolution;}else{middleBoundGrid=0;boundCoarseGrid=surface.resolution;}
                 boundDetailGrid=detailSurface.resolution;heightCopyRevision=0;}
-            if(editPreview.promote()){if(backJob){vkCheck(vkDeviceWaitIdle(gpu.device));if(backKey.midActive)middleBack.bindCoarse(surface);else detailBack.bindCoarse(surface);}   /* the base field moved: the job's ring (or patch) blends against the new one */
-                boundCoarseGrid=boundDetailGrid=middleBoundGrid=0;baseHeightRevision=detailHeightRevision=walkHeightsRevision=heightCopyRevision=0;}
+            if(editPreview.promote()){if(backJob){vkCheck(vkDeviceWaitIdle(gpu.device));if(backKey.midActive&&!backKey.midReused)middleBack.bindCoarse(surface);else if(!backKey.midActive)detailBack.bindCoarse(surface);}   /* the base field moved: the job's ring (or patch) blends against the new one */
+                boundCoarseGrid=boundDetailGrid=middleBoundGrid=0;baseHeightRevision=pendingPickRevision=detailHeightRevision=walkHeightsRevision=heightCopyRevision=0;}
+            {
+                bool dwRenderedUpdate=false;
+                if(interactiveGui){
+                    const uint64_t wantDwHash=dwActiveCfg.enabled?dwActiveCfg.generationHash():0ull;
+                    const bool ownerDwReady=!dwActiveMode||(surface.dwEngine&&surface.dwEngine->isInitialized()&&surface.dwEngineHash==wantDwHash&&!surface.dwAsyncBusy()&&!surface.dwPending);
+                    if(surface.advanceDynamicWatersAsync())dwRenderedUpdate=true;
+                    if(detailInitialized&&ownerDwReady&&(!detailAuto||(frontFull&&dwCameraSettled&&!backJob))&&detailSurface.advanceDynamicWatersAsync())dwRenderedUpdate=true;
+                    if(middleInitialized&&ownerDwReady&&(!detailAuto||(frontFull&&dwCameraSettled&&!backJob))&&middleSurface.advanceDynamicWatersAsync())dwRenderedUpdate=true;
+                    if(biomeInitialized&&biomeSurface.finishPendingDynamicWaters())dwRenderedUpdate=true;
+                }else{
+                    if(surface.finishPendingDynamicWaters())dwRenderedUpdate=true;
+                    if(detailInitialized&&detailSurface.finishPendingDynamicWaters())dwRenderedUpdate=true;
+                    if(middleInitialized&&middleSurface.finishPendingDynamicWaters())dwRenderedUpdate=true;
+                    if(biomeInitialized&&biomeSurface.finishPendingDynamicWaters())dwRenderedUpdate=true;
+                    if(backJob&&backInitialized&&detailBack.fieldRevision==backRevision&&detailBack.dwPending)detailBack.finishPendingDynamicWaters();
+                    if(backJob&&backInitialized&&backKey.midActive&&!backKey.midReused&&middleBack.fieldRevision==backRevision&&middleBack.dwPending)middleBack.finishPendingDynamicWaters();
+                }
+                if(dwRenderedUpdate){
+                    baseHeightCache.clear();baseHeightRevision=0;
+                    pendingPickRevision=0;
+                    detailHeightCache.clear();detailHeightRevision=0;walkHeightsRevision=0;heightCopyRevision=0;
+                    structureCacheRev=0;
+                    if(options.frames>0&&(!options.screenshot.empty()||!options.samples.empty()||!options.cellSamples.empty()||!options.biomeSamples.empty())){
+                        gpu.immediate([&](VkCommandBuffer redrawCmd){
+                            RenderSnapshotScope redrawSnapshot(params,graphSeeds,revision,editPreview.display);
+                            DrawParams redrawBase=draw;redrawBase.meta.x=surface.resolution;
+                            DrawParams redrawDetail=localDraw;redrawDetail.meta.x=detailSurface.resolution;
+                            DrawParams redrawMid=middleDraw;redrawMid.meta.x=middleSurface.resolution;
+                            surface.record(redrawCmd,lastSubmitted,params,graphSeeds,redrawBase,surface.fieldRevision,renderDetail?(middleActive?&middleSurface:&detailSurface):nullptr,renderDetail?(middleActive?&redrawMid:&redrawDetail):nullptr);
+                            redrawSnapshot.restore();
+                        });
+                    }
+                }
+            }
             if(!options.previewTrace.empty())previewTrace.push_back({{"frame",frameNumber},{"time",elapsed},{"frame_ms",dt*1000},{"draw_resolution",renderedThisFrame},{"target_resolution",requestedResolution},{"target_revision",revision},{"display_target",editPreview.display.target},{"busy",editPreview.busy()},{"job",editPreview.job},{"progress",editPreview.progress()},{"finer_job",backJob},{"finer_front",frontFull},{"detail_placed",detailPlaced},{"finer_progress",finerProgress},{"finer_dispatches",backInitialized?detailBack.generationDispatches+middleBack.generationDispatches:0}});
             editor.document.previewExtent=params.domain.x;
             if(persistentSession&&elapsed-sessionTick>=1){try{project.tick(editor.document,worldSeed,captureView(),elapsed);sessionTick=elapsed;}catch(const std::exception& e){editor.status=e.what();}}
@@ -1345,7 +2855,7 @@ int main(int argc,char** argv){
         vkCheck(vkDeviceWaitIdle(gpu.device));
         if(!options.previewTrace.empty()){auto path=std::filesystem::path(options.previewTrace);if(!path.parent_path().empty())std::filesystem::create_directories(path.parent_path());std::ofstream(path)<<previewTrace.dump(2);}
         if(!options.exportPreset.empty())editor.document.exportTo(options.exportPreset);
-        if(persistentSession)try{project.tick(editor.document,worldSeed,captureView(),elapsed,true);}catch(const std::exception& e){std::cerr<<"Recovery save failed: "<<e.what()<<"\n";}
+        if(persistentSession)try{project.tick(editor.document,worldSeed,captureView(),elapsed,true);if(auto cur=captureGlobalLayout().dump();cur!=savedGlobalLayout)ProjectSession::atomicJson(globalLayoutFile,PresetJson::parse(cur));}catch(const std::exception& e){std::cerr<<"Recovery save failed: "<<e.what()<<"\n";}
         if(!options.exportDatapack.empty()){editor.document.worldSeed=worldSeed;editor.document.exportDatapack(options.exportDatapack,appRoot/"assets"/"ftf-datapack-template.zip");}
         if(!options.screenshot.empty())surface.screenshot(lastSubmitted,options.screenshot);
         if(!options.uiScreenshot.empty())gpu.screenshotUi(ImGui::GetDrawData(),options.uiScreenshot);
@@ -1361,7 +2871,7 @@ int main(int argc,char** argv){
         const char* profileNames[]={"plains","steppe","dales","hills1","hills2","plateau","badlands","torridonian"};
         RECT chromeClient{};GetClientRect(glfwGetWin32Window(window),&chromeClient);POINT dragPoint{LONG((chrome.drag.left+chrome.drag.right)/2),15},edgePoint{1,150};ClientToScreen(glfwGetWin32Window(window),&dragPoint);ClientToScreen(glfwGetWin32Window(window),&edgePoint);auto dragHit=SendMessageW(glfwGetWin32Window(window),WM_NCHITTEST,0,MAKELPARAM(dragPoint.x,dragPoint.y)),edgeHit=SendMessageW(glfwGetWin32Window(window),WM_NCHITTEST,0,MAKELPARAM(edgePoint.x,edgePoint.y));
         Json report={{"shortcut_undo",shortcutUndoObserved},{"settings_reset",resetObserved},{"timing_scope","Generation timings include all compute/filter phases plus background refinement; draw is visible rendering. CPU frame intervals include waits/CPU work."},{"window_controls",{{"native_caption",bool(GetWindowLongPtrW(glfwGetWin32Window(window),GWL_STYLE)&WS_CAPTION)},{"colored_buttons",3},{"caption_drag_hit",dragHit==HTCAPTION},{"edge_resize_hit",edgeHit==HTLEFT}}},{"editing_preview",{{"enabled",editPreview.enabled},{"target_resolution",requestedResolution},{"actual_resolution",surface.resolution},{"busy",editPreview.busy()},{"status",editPreview.status()},{"promotions",editPreview.promotions},{"coarse_updates",editPreview.coarseUpdates},{"worker_cancellations",editPreview.worker.cancelledGenerations},{"cancel_exercised",refineCancelExercised},{"worker_progress",editPreview.progress()}}},{"selective_updates",{{"enabled",surface.selectiveGeneration},{"last_stage",generationStageName(surface.lastGenerationStage)},{"terrain_runs",surface.stageRuns[0]+editPreview.worker.stageRuns[0]},{"climate_runs",surface.stageRuns[1]+editPreview.worker.stageRuns[1]},{"filter_runs",surface.stageRuns[2]+editPreview.worker.stageRuns[2]},{"biome_runs",surface.stageRuns[3]+editPreview.worker.stageRuns[3]},{"material_runs",surface.stageRuns[4]+editPreview.worker.stageRuns[4]}}},{"application","FTF Surface Lab"},{"biome_mod_mask",biomeModMask},{"panels",{{"docked",true},{"observed_hide",observedPanelHide},{"left_width",dock.leftWidth},{"actions_hidden",dock.bottomHidden},{"left_collapsed",leftCollapsed},{"right_collapsed",rightCollapsed},{"viewport_collapsed",viewportCollapsed},{"right_size",{rightPanelSize.x,rightPanelSize.y}}}},{"save_as_popup_observed",saveAsPopupObserved},{"saved_project",project.currentFile.string()},{"pick_check",pickCheckReport},{"finer_patch",{{"center",{detailCenter.x,detailCenter.y}},{"radius",detailRenderRadius},{"grid",detailGrid},{"placed",detailPlaced}}},{"copy_tool",{{"tool_on",copyTool},{"copied",copiedText},{"clipboard",[&]{const char* c=ImGui::GetClipboardText();return std::string(c?c:"");}()},{"hover_y",hover.valid?hover.position.y:0.0f},{"sun_before",sunBefore},{"sun_after",sunAzimuth},{"pan_moved",glm::length(pan-panBefore)}}},{"biome_count",[&]{PresetJson out={{"status",censusStatus},{"counted",census.has_value()}};if(census){out["generated"]=census->generated;out["possible"]=census->possible;out["grid"]=census->grid;out["world_size"]=census->worldSize;PresetJson missing=PresetJson::array(),groups=PresetJson::array();for(auto& g:census->groups){groups.push_back({{"pack",g.pack},{"generated",g.generated},{"possible",g.possible}});for(auto& name:g.missing)missing.push_back(g.pack+": "+name);}out["groups"]=groups;out["missing"]=missing;out["unreachable"]=census->unreachable;out["unexpected"]=census->unexpected;}return out;}()},{"finer_jobs",finerJobs},{"intermediate_detail_band",{{"active",middleActive},{"resolution",middleActive?middlePrevious.meta.x:0},{"radius",middleActive?middlePrevious.domain.x*.5f:0}}},{"distance_lod",distanceLod},{"lod_patches",surface.lodPatches},{"drawn_triangles",surface.drawnTriangles},{"exit_prompt_observed",exitPromptObserved},{"exit_cancel_observed",exitCancelObserved},{"graphics_initial",initialGraphics},{"graphics_restore_preserved",graphicsRestoreObserved},{"fly_pose_error",poseError},{"fly_direction_error",poseDirectionError},{"camera_fov",cameraFov},{"culled_patches",surface.culledPatches},{"camera_yaw",yaw},{"spawn_undo_observed",observedSpawnUndo},{"terrain_filter",{{"selection",editor.terrainSelection},{"highlight",editor.highlightTerrain},{"isolate",editor.isolateTerrain}}},{"last_edited_property",editor.lastEditedPath},{"pan",{pan.x,pan.y,cameraPanY}},{"spawn",{editor.document.spawn().x,editor.document.spawn().y}},{"measure_points",measurePoints.size()},{"points",[&]{auto list=Json::array();for(auto& w:points)list.push_back({{"name",w.name},{"x",w.p.x},{"y",w.p.y},{"z",w.p.z}});return list;}()},{"point_tool",pointTool},{"walk",{{"active",walkMode},{"position",{walkPos.x,walkPos.y,walkPos.z}},{"yaw",walkYaw},{"flying",walkFlying},{"on_ground",walkOnGround},{"patch_samples",walkPatch.meta.x},{"patch_auto",detailAuto},{"patch_radius",detailRenderRadius},{"patch_grid",detailGrid},{"heights",walkHeights.size()}}},{"lod_adaptive",{{"enabled",lodAdaptive},{"state",lodAdaptiveState},{"spacing",lodAdaptiveSpacing},{"finest",lodFinest},{"coarsest",lodCoarsest}}},{"ftf_version",ftfVersions[ftfVersionIndex].id},{"fly",{{"active",flyMode},{"position",{flyPos.x,flyPos.y,flyPos.z}},{"yaw",flyYaw},{"pitch",flyPitch},{"speed",flySpeed}}},{"points_roundtrip",{pointsRoundTrip[0],pointsRoundTrip[1]}},{"points_roundtrip_name",pointsRoundTripName},{"points_centered_pan",{pointsCentered.x,pointsCentered.y}},{"measure_horizontal",measureHorizontal},{"measure_direct",measureDirect},{"measure_surface",measureSurface},{"hover",{{"valid",hover.valid},{"biome",hover.biome},{"terrain",hover.terrain},{"block",hover.block},{"position",{hover.position.x,hover.position.y,hover.position.z}},{"height",hover.sample.values.x},{"biome_id",hover.sample.ids.x},{"block_id",hover.sample.ids.z}}},{"sun_azimuth",sunAzimuth},{"sun_elevation",sunElevation},{"sun_intensity",sunIntensity},{"sun_shadows",sunShadows},{"sun_shadow_strength",sunShadowStrength},{"restore_prompt",project.restorePending},{"autosave_interval_seconds",project.intervalSeconds},{"camera_pitch",pitch},{"camera_centered",cameraCentered},{"camera_distance_factor",distance},{"camera_orbit_center",{lastCameraCenter.x,lastCameraCenter.y,lastCameraCenter.z}},{"ambient_occlusion",ambientOcclusion},{"cloud_shadows",cloudShadows},{"ao_intensity",aoIntensity},{"shadow_intensity",shadowIntensity},{"shadow_speed",shadowSpeed},{"shadow_animation_seconds",surface.effects.z},{"detail",{{"placed",detailPlaced},{"tool_active",detailTool},{"center",{detailCenter.x,detailCenter.y}},{"radius",detailAuto?autoRadiusBackup:detailRadius},{"auto_patch",detailAuto},{"render_radius",detailRenderRadius},{"screen_radius_pixels",detailScreenRadius},{"screen_space",screenDetail},{"coverage_limited",detailCoverageLimited},{"resolution",detailAuto?autoGridBackup:detailGrid},{"actual_resolution",detailSurface.resolution},{"adaptive_triangles",adaptiveDetailMesh},{"drawn_triangles",detailSurface.drawnTriangles},{"revision",detailRevision},{"base_revision",revision},{"spacing",detailRadius*2/(detailGrid-1)},{"base_spacing",params.domain.x/(params.meta.x-1)}}},{"terrain_model",params.meta.z==6?"FTF continent diagnostic: edge, water table, size and identity":params.meta.z==5?"FTF surface: all four continent types, terrain/islands/rivers/world filters and Minecraft 1.21.1 surface biome selection; no blocks.":params.meta.z==4?"FTF land stage: terrain-provider heights, volcanoes, regional borders and mountain chains; continents/oceans/hydrology/world filters/final biomes excluded":params.meta.z==1?"FTF Perlin2 primitive only":params.meta.z==3?"FTF RegionModule diagnostic: identity, edge, center X/Z; no terrain selection":params.meta.z==2?"Isolated FTF terrain populator; no continent/region blending, hydrology, tile filters or verified biomes":"Validation composition using FTF Perlin2; not full FTF terrain or biome selection"},
-            {"rivers_enabled",params.meta.z==5&&!options.noRivers},{"world_filters_enabled",params.meta.z==5&&!options.noWorldFilters},{"biome_selection","Minecraft 1.21.1 Overworld surface RTree + FTF cell climate/continentalness/river roles"},{"biome_color_mode",biomeColors},{"surface_materials_enabled",params.meta.z==5&&biomeColors==3&&!options.noClimate},{"block_palette_count",blockLegend["block_count"]},
+            {"rivers_enabled",params.meta.z==5&&!options.noRivers},{"dynamic_waters",{{"enabled",dwCfg.enabled},{"normal_river_mode",dw::normalRiverModeName(dwCfg.normalRiverMode)},{"hash",dwCfg.generationHash()}}},{"world_filters_enabled",params.meta.z==5&&!options.noWorldFilters},{"biome_selection","Minecraft 1.21.1 Overworld surface RTree + FTF cell climate/continentalness/river roles"},{"biome_color_mode",biomeColors},{"surface_materials_enabled",params.meta.z==5&&biomeColors==3&&!options.noClimate},{"block_palette_count",blockLegend["block_count"]},
             {"ftf_climate_enabled",params.meta.z==5&&!options.noClimate},{"archipelagos_enabled",params.meta.z==5&&graphSeeds.islandMeta.x!=0},
             {"river_map_count",riverNetworks.buffer.size()>=16?riverNetworks.buffer[0]:0},{"river_root_count",riverNetworks.buffer.size()>=16?riverNetworks.buffer[1]:0},{"river_segment_count",riverNetworks.buffer.size()>=16?riverNetworks.buffer[2]:0},{"wetland_count",riverNetworks.buffer.size()>=16?riverNetworks.buffer[3]:0},
             {"mix_choice_count",graphSeeds.mixMeta.x},{"mix_weighted_slots",graphSeeds.mixMeta.y},
@@ -1370,11 +2880,13 @@ int main(int argc,char** argv){
             {"show_ocean_floor",showOceanFloor},{"height_overflow_highlight",showHeightLimit},{"terrain_height_limit_y",terrainHeightLimit},{"terrain_height_limit_source","/world/properties/worldHeight"},{"world_origin",{params.domain.y,params.domain.z}},{"utility_menu","right"},
             {"mountain_cache_samples",surface.mountainCacheSamples},{"mountain_cache_capacity_mib",16},
             {"terrain_profile",params.meta.z==2?profileNames[params.meta.w]:"none"},
-            {"gpu",gpu.properties.deviceName},{"resolution",params.meta.x},{"automatic_resolution_target_fps",targetHz},{"world_extent",params.domain.x},{"viewport",{surface.width,surface.height}},
+            {"gpu",gpu.properties.deviceName},{"float64_supported",gpu.deviceSupportsFloat64},{"float64_fallback",!gpu.hasFloat64},{"resolution",params.meta.x},{"automatic_resolution_target_fps",targetHz},{"world_extent",params.domain.x},{"viewport",{surface.width,surface.height}},
             {"terrain_storage_mib",surface.fieldBytes/1048576.0},{"max_storage_buffer_range",gpu.properties.limits.maxStorageBufferRange},{"patch_instances",surface.patchCount},
             {"world_seed",worldSeed},{"imported_preset",editor.document.loaded()?editor.document.source.string():""},
+            {"preset_version_warning",{{"mismatch",editor.versionWarning.mismatch},{"detected",editor.versionWarning.detectedVersion},{"summary",editor.versionWarning.summary}}},
+            {"startup_setup_open",startupSetupOpen},{"ftf_version_locked",ftfVersionLocked},
             {"erosion_engine",params.meta.z==5&&!options.noWorldFilters?"FTF 22-Oct Phacelle + cliff relaxation":"inactive"},
-            {"frames",frameNumber},{"generation_submissions",generatedFrames},{"animated_settings",animate},{"validation_layer_active",gpu.validationActive},{"validation_errors",gpu.validationErrors},
+            {"frames",frameNumber},{"structure_pins",structurePins.size()},{"generation_submissions",generatedFrames},{"animated_settings",animate},{"validation_layer_active",gpu.validationActive},{"validation_errors",gpu.validationErrors},
             {"mixed_resolution_exercise",options.exercise},
             {"profile_switch_exercise",options.profileExercise},
             {"gpu_samples",gpuTimes.size()},{"gpu_total_median_ms",percentile(gpuTimes,.5)},{"gpu_total_p95_ms",percentile(gpuTimes,.95)},

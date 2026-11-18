@@ -7,12 +7,19 @@
 #include <set>
 
 using PresetJson=nlohmann::ordered_json;
+struct PresetVersionWarning {
+    bool mismatch = false;
+    std::string detectedVersion;
+    std::string summary;
+};
+
 struct PresetDocument {
-    PresetJson data;
-    mutable PresetJson savedData;
+    PresetJson data=PresetJson::object();
+    mutable PresetJson savedData=PresetJson::object();
     void markSaved()const{savedData=data;}
     std::filesystem::path source;
     std::string name;
+    std::optional<std::string> sourceFtfVersion;
     std::optional<int64_t> worldSeed;
     std::optional<float> previewExtent;
     glm::vec2 spawn()const;
@@ -20,13 +27,16 @@ struct PresetDocument {
     bool loaded()const{return data.is_object()&&!data.empty();}
     void load(const std::filesystem::path& path);
     void exportTo(const std::filesystem::path& path) const;
-    void exportDatapack(const std::filesystem::path& path,const std::filesystem::path& fallback)const;
+    void exportDatapack(const std::filesystem::path& path,const std::filesystem::path& fallback,const std::string& ftfVersion={})const;
     void set(const std::string& pointer,const PresetJson& value);
     void apply(TerrainParams& params)const;
     uint64_t terrainSeedRoot(int64_t seed,uint32_t profile) const;
 };
 
+PresetVersionWarning checkPresetVersionCompatibility(const PresetDocument& doc,const std::string& activeVersion);
+
 bool randomiseSeedButton(int64_t& value,bool worldSeed=false);
+bool copySeedButton(int64_t value);
 
 // Suggested slider limits never constrain the single-click numeric input.
 bool numberControl(const char* label,float& value,float low,float high,const char* format="%.5g");
@@ -34,6 +44,11 @@ bool numberControl(const char* label,float& value,float low,float high,const cha
 class PresetEditor {
 public:
     PresetDocument document;
+    std::string activeFtfVersion{"1.0.0032"};
+    PresetVersionWarning versionWarning{};
+    bool versionMismatchPopupPending=false;
+    void setActiveFtfVersion(const std::string& v){activeFtfVersion=v.empty()?std::string("1.0.0032"):v;refreshVersionWarning();}
+    void refreshVersionWarning(){versionWarning=document.loaded()?checkPresetVersionCompatibility(document,activeFtfVersion):PresetVersionWarning{};}
     std::string status;
     std::string feedback;
     bool feedbackLive{},showAllProperties=false,followEditedSetting=true,applyOnRelease=false;std::string dragPath;double dragValue=0; // applyOnRelease: sliders commit when released

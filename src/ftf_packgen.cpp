@@ -42,7 +42,7 @@ Datapack generateFtfDatapack(const PackJson& preset,const Datapack& sourceTempla
     J caves=preset.value("caves",sourceTemplate.original.at("caves"));
     J misc=preset.value("miscellaneous",sourceTemplate.original.at("miscellaneous"));
     auto flag=[&](const char* name,bool fallback){return misc.value(name,fallback);};
-    bool erode=flag("screeDecorator",flag("erosionDecorator",true)),snow=flag("naturalSnowDecorator",true),smooth=flag("smoothLayerDecorator",true),strata=flag("strataDecorator",true),features=flag("customBiomeFeatures",false);
+    bool erode=flag("screeDecorator",flag("erosionDecorator",true)),snow=flag("naturalSnowDecorator",true),smooth=flag("smoothLayerDecorator",true),coverPlants=flag("snowCoversSmallPlants",true),strata=flag("strataDecorator",true),features=flag("customBiomeFeatures",false);
     auto dimension=get("data/minecraft/dimension_type/overworld.json");dimension["min_y"]=-depth;dimension["height"]=height+depth;dimension["logical_height"]=height+depth;put("data/minecraft/dimension_type/overworld.json",dimension);
     auto ns=get(settings);ns["noise"]["min_y"]=-depth;ns["noise"]["height"]=height+depth;ns["sea_level"]=sea;ns["ore_veins_enabled"]=caves.at("largeOreVeins");
     auto& choice=ns.at("noise_router").at("final_density").at("argument1").at("argument").at("argument2");
@@ -115,6 +115,6 @@ Datapack generateFtfDatapack(const PackJson& preset,const Datapack& sourceTempla
     auto cfg=J::parse(sourceTemplate.files.at("data/freeterraforged/worldgen/configured_feature/erode.json")).at("config");
     for(auto [json,presetKey]:{std::pair{"rock_var","rockVariance"},{"rock_min","rockMin"},{"dirt_var","dirtVariance"},{"dirt_min","dirtMin"},{"rock_steepness","rockSteepness"},{"dirt_steepness","dirtSteepness"},{"scree_steepness","screeSteepness"}})cfg[json]=scree.at(presetKey);
     if(erode)put("data/freeterraforged/worldgen/configured_feature/erode.json",{{"type","freeterraforged:erode"},{"config",cfg}});
-    if(snow||smooth)put("data/freeterraforged/worldgen/configured_feature/decorate_snow.json",{{"type","freeterraforged:decorate_snow"},{"config",{{"erode",snow},{"smooth",smooth},{"erode_config",cfg}}}});
+    if(snow||smooth)put("data/freeterraforged/worldgen/configured_feature/decorate_snow.json",{{"type","freeterraforged:decorate_snow"},{"config",{{"erode",snow},{"smooth",smooth},{"erode_config",cfg},{"cover_plants",coverPlants}}}});
     generated.original=preset;generated.files[generated.presetPath]=preset.dump(2)+"\n";return generated;
 }

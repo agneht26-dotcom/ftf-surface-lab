@@ -59,7 +59,7 @@ void main(){
     if(sky)color=skyColor(dir,sunDir); // any atmosphere option replaces the flat clear colour with the sky the water reflects
     // Water: the sea plane is hit analytically; it is visible when the generated floor there lies below it and nothing is drawn in front.
     if(!sky&&atmoWater.x>.5&&abs(dir.y)>1e-5){float seaLevel=atmoWater.w,exaggeration=max(atmoCloud2.w,1e-4);float t=(seaLevel-eye.y)/dir.y;
-        if(t>0.0&&travel>t*.97-2.0){vec3 hit=eye+dir*t;float floorHeight=fieldHeight(hit.xz)*exaggeration;
+        if(t>0.0&&(travel>=t*.95-2.0||sky)){vec3 hit=eye+dir*t;float floorHeight=fieldHeight(hit.xz)*exaggeration;
             if(floorHeight<seaLevel-.02*exaggeration&&abs(hit.x)<pc.domain.x*.5&&abs(hit.z)<pc.domain.x*.5)color=shadeWater(scene,hit,-dir,sunDir,max(0.0,(seaLevel-floorHeight)/exaggeration));}}
     // Exponential height fog, integrated along the ray.
     if(atmoFog.x>.5){float dens=atmoFog.y*.001,fall=atmoFog.z*.001;float t=sky?min(travel,200000.0):travel;

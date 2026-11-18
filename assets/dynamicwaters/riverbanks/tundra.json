@@ -1,0 +1,15 @@
+{
+  "where": {
+    "biomes": ["minecraft:snowy_plains", "minecraft:ice_spikes", "minecraft:snowy_taiga", "minecraft:grove",
+      "minecraft:snowy_slopes", "minecraft:frozen_peaks", "minecraft:jagged_peaks", "minecraft:frozen_river"],
+    "tags": ["c:is_snowy", "c:is_icy"],
+    "not": ["#c:is_swamp", "#c:is_beach"]
+  },
+  "rapids": ["minecraft:gravel*4", "minecraft:stone*2", "minecraft:cobblestone"],
+  "silt": ["minecraft:gravel*3", "minecraft:clay", "minecraft:sand"],
+  "shore": ["keep*4", "minecraft:gravel*2", "minecraft:snow_block"],
+  "bars": ["minecraft:gravel*3", "minecraft:sand"],
+  "flats": ["keep*3", "minecraft:gravel"],
+  "patch_size": 5,
+  "shore_height": 1
+}

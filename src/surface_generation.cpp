@@ -8,7 +8,7 @@ void dependency(VkCommandBuffer cmd){VkMemoryBarrier b{VK_STRUCTURE_TYPE_MEMORY_
 }
 GenerationStage Surface::updateStage(const TerrainParams& p,const GraphSeeds& g)const{
     if(!selectiveGeneration||!inputsValid||!fieldRevision)return GenerationStage::Terrain;
-    auto stage=completedInputs.difference({p,g,riverEpoch});
+    auto stage=completedInputs.difference({p,g,riverEpoch,dwConfig.usesVanillaGpuRivers()});
     if(stage==GenerationStage::Climate&&!preClimateValid)return GenerationStage::Terrain;
     if(stage==GenerationStage::Filters&&!preFilterValid)return GenerationStage::Terrain;
     return stage;
@@ -43,7 +43,7 @@ float Surface::generationProgress()const{
     auto& s=workSteps[std::min(workIndex,workSteps.size()-1)];float part=s.x&&s.y?float(uint64_t(workY)*s.x+workX)/float(uint64_t(s.x)*s.y):0;
     return std::clamp((float(workIndex)+part)/float(workSteps.size()),0.0f,1.0f);
 }
-void Surface::cancelGeneration(){if(workActive){++cancelledGenerations;workActive=false;inputsValid=preClimateValid=preFilterValid=false;workSteps.clear();}}
+void Surface::cancelGeneration(){waitForDwAsync(true);if(workActive){++cancelledGenerations;workActive=false;inputsValid=preClimateValid=preFilterValid=false;workSteps.clear();}}
 bool Surface::generateWork(VkCommandBuffer cmd,uint32_t frameIndex,const TerrainParams& p,const GraphSeeds& seeds,uint64_t revision){
     auto& f=frames.at(frameIndex);
     if(workActive&&workRevision!=revision)cancelGeneration();
@@ -55,7 +55,7 @@ bool Surface::generateWork(VkCommandBuffer cmd,uint32_t frameIndex,const Terrain
         auto stage=updateStage(p,seeds);lastGenerationStage=stage;
         if(stage==GenerationStage::None){fieldRevision=revision;f.workTiles=0;for(uint32_t i:{4u,5u,6u,1u,2u})if(f.queries)vkCmdWriteTimestamp(cmd,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,f.queries,i);return false;}
         if(p.meta.z==5&&uint32_t(stage)<=uint32_t(GenerationStage::Filters))ensureCheckpoints();
-        workRevision=revision;workInputs={p,seeds,riverEpoch};workActive=true;workIndex=workX=workY=0;workTiles=2;workSteps.clear();
+        workRevision=revision;workInputs={p,seeds,riverEpoch,dwConfig.usesVanillaGpuRivers()};workActive=true;workIndex=workX=workY=0;workTiles=2;workSteps.clear();
         auto add=[&](VkPipeline pipeline,uint32_t x,uint32_t y,uint32_t tile=16){workSteps.push_back({pipeline,x,y,tile,0});};
         auto action=[&](uint32_t a){workSteps.push_back({{},0,0,0,a});};
         uint32_t grid=(resolution+7)/8;
@@ -75,16 +75,16 @@ bool Surface::generateWork(VkCommandBuffer cmd,uint32_t frameIndex,const Terrain
             if(p.meta.z==5){add(buildWorldMap,grid,grid,64);add(buildOceanFloor,grid,grid,64);}
             uint32_t variant=p.meta.z==6?15u:p.meta.z==5?(header.info.w?13u:14u):p.meta.z==4?(header.info.w?11u:12u):p.meta.z==3?10u:p.meta.z==2?2u+p.meta.w:p.meta.z;
             add(variantPipeline(variant),grid,grid);
-            if(p.meta.z==5){add(buildIslandSurface,grid,grid);if(hasRivers)add(buildRivers,grid,grid,16);if(preClimate.handle)action(1);}
+            if(p.meta.z==5){add(buildIslandSurface,grid,grid);if(hasRivers&&(!dwConfig.enabled||dwConfig.normalRiverMode==dw::NormalRiverMode::VANILLA))add(buildRivers,grid,grid,16);if(preClimate.handle)action(1);}
         }else if(stage==GenerationStage::Climate)action(3);
         else if(stage==GenerationStage::Filters)action(4);
         if(p.meta.z==5&&stage<=GenerationStage::Climate){++stageRuns[1];if(seeds.climateMeta.x)add(buildClimate,grid,grid,32);if(preFilter.handle)action(2);}
         if(p.meta.z==5&&stage<=GenerationStage::Filters){++stageRuns[2];if(seeds.filterMeta.x){const uint32_t phases[]={8u,1u,0u,6u,2u,3u,4u,8u,1u,0u,6u,7u,5u};for(int i=0;i<13;++i){add(worldFilters[phases[i]],grid,grid,phases[i]==4?16:64);if(i>=7&&i<=9)workSteps.back().row=1;}}}   // row 1 (domain.w 8): the second cliff relaxation, which has its own seed in FTF 1.0.0013+
         // The biome + block pass is ~90% of a build (~0.95 s at 2048): progressive builds run it in bands of biomeBandGroups x 8 rows (~2-4 ms each at 2048) under the frame budget.
         // Corner pre-pass first (block view at sample spacing <= 4 blocks): the block pass then reads its 4 corner levels per column.
-        const uint32_t cornerGroups=(uint32_t(p.domain.x/16.0f)+5+7)/8;const bool corners=seeds.biomeSeeds2.w==3u&&p.domain.x<=4.0f*float(p.meta.x-1)&&cornerGroups*8<=1024;
-        if(p.meta.z==5&&seeds.climateMeta.x&&corners)add(buildCorners,cornerGroups,cornerGroups);
-        if(p.meta.z==5&&seeds.climateMeta.x){if(stage<=GenerationStage::Biomes){++stageRuns[3];if(progressiveGeneration&&biomeBandGroups)for(uint32_t r=0;r<grid;r+=biomeBandGroups)workSteps.push_back({buildBiomes,grid,std::min(biomeBandGroups,grid-r),16,0,r});else add(buildBiomes,grid,grid);}else{++stageRuns[4];add(buildRecolor,grid,grid);}}
+        const uint32_t cornerGroups=(uint32_t(p.domain.x/16.0f)+5+7)/8;const bool corners=seeds.biomeSeeds2.w==3u&&p.domain.x<=8.1f*float(p.meta.x-1)&&cornerGroups*8<=1024;
+        if(p.meta.z==5&&seeds.climateMeta.x&&corners)add(cornersPipeline(),cornerGroups,cornerGroups);
+        if(p.meta.z==5&&seeds.climateMeta.x){if(stage<=GenerationStage::Biomes){++stageRuns[3];if(progressiveGeneration&&biomeBandGroups)for(uint32_t r=0;r<grid;r+=biomeBandGroups)workSteps.push_back({buildBiomes,grid,std::min(biomeBandGroups,grid-r),16,0,r});else add(buildBiomes,grid,grid);}else{++stageRuns[4];add(buildBiomes,grid,grid);workSteps.back().row=0xffffffffu;}}
         if(stage<=GenerationStage::Filters)add(filter,grid,grid,64);
     }
     vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,computeLayout,0,1,&fields,0,nullptr);
@@ -97,12 +97,12 @@ bool Surface::generateWork(VkCommandBuffer cmd,uint32_t frameIndex,const Terrain
         if(s.action){checkpoint(cmd,s.action);profileStamp("checkpoint copy "+std::to_string(s.action));++workIndex;continue;}
         if(progressiveGeneration&&tiles>=workTiles)break;
         dependency(cmd);vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,s.pipeline);
-        if(s.row!=pushedRow){TerrainParams band=p;band.domain.w=float(s.row*8);vkCmdPushConstants(cmd,computeLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(band),&band);pushedRow=s.row;}
+        if(s.row!=pushedRow){TerrainParams band=p;if(s.row==0xffffffffu){band.meta.w|=1u;band.domain.w=0.0f;}else band.domain.w=float(s.row*8);vkCmdPushConstants(cmd,computeLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(band),&band);pushedRow=s.row;}
         if(progressiveGeneration){vkCmdDispatch(cmd,s.x,s.y,1);profileStamp(stepName(s.pipeline));workX=workY=0;++workIndex;++tiles;++generationDispatches;} // whole steps: sub-tile vkCmdDispatchBase made NVIDIA's vkDestroyDevice spin ~14 s
         else{vkCmdDispatch(cmd,s.x,s.y,1);profileStamp(stepName(s.pipeline));++workIndex;++generationDispatches;++tiles;}
     }
     dependency(cmd);f.workStage=uint32_t(started);f.workTiles=tiles;
-    if(workIndex==workSteps.size()){workActive=false;completedInputs=workInputs;inputsValid=true;fieldRevision=revision;}
+    if(workIndex==workSteps.size()){workActive=false;completedInputs=workInputs;inputsValid=true;fieldRevision=revision;dwLastSeeds=seeds;dwPending=dwConfig.enabled&&p.meta.z==5;}
     for(uint32_t i:{4u,5u,6u,1u,2u})if(f.queries)vkCmdWriteTimestamp(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,f.queries,i);
     return tiles!=0;
 }
@@ -110,17 +110,26 @@ bool Surface::generateWork(VkCommandBuffer cmd,uint32_t frameIndex,const Terrain
 void Surface::exchangeTerrain(Surface& o){
     // Called only after submission, outside render-pass/command recording. One
     // promotion wait protects descriptor updates; ordinary refinement doesn't wait.
+    waitForDwAsync(false);o.waitForDwAsync(false);
     vkCheck(vkDeviceWaitIdle(gpu.device));using std::swap;
     swap(resolution,o.resolution);swap(indexCount,o.indexCount);swap(patchCells,o.patchCells);swap(patchCount,o.patchCount);swap(lodFirst,o.lodFirst);swap(lodCount,o.lodCount);swap(fieldBytes,o.fieldBytes);swap(fieldRevision,o.fieldRevision);swap(lastParams,o.lastParams);swap(lastGenerationStage,o.lastGenerationStage);swap(mountainCacheSamples,o.mountainCacheSamples);
-    swap(indices,o.indices);swap(graphSeeds,o.graphSeeds);swap(mountainCache,o.mountainCache);swap(cellState,o.cellState);swap(regionCells,o.regionCells);swap(riverNetworks,o.riverNetworks);swap(riverWords,o.riverWords);swap(exactNoise,o.exactNoise);swap(exactNoiseKey,o.exactNoiseKey);swap(exactNoiseValid,o.exactNoiseValid);swap(cornerLevels,o.cornerLevels);swap(riverEpoch,o.riverEpoch);swap(hasRivers,o.hasRivers);swap(biomeTable,o.biomeTable);swap(effectsBuffer,o.effectsBuffer);swap(inspectionBuffer,o.inspectionBuffer);swap(rawField,o.rawField);swap(field,o.field);swap(colors,o.colors);swap(fields,o.fields);
+    swap(indices,o.indices);swap(graphSeeds,o.graphSeeds);swap(mountainCache,o.mountainCache);swap(cellState,o.cellState);swap(regionCells,o.regionCells);swap(riverNetworks,o.riverNetworks);swap(riverWords,o.riverWords);swap(voronoiCells,o.voronoiCells);swap(voronoiWords,o.voronoiWords);swap(voronoiKey,o.voronoiKey);swap(exactNoise,o.exactNoise);swap(exactNoiseKey,o.exactNoiseKey);swap(exactNoiseValid,o.exactNoiseValid);swap(cornerLevels,o.cornerLevels);swap(riverEpoch,o.riverEpoch);swap(hasRivers,o.hasRivers);swap(biomeTable,o.biomeTable);swap(effectsBuffer,o.effectsBuffer);swap(inspectionBuffer,o.inspectionBuffer);swap(rawField,o.rawField);swap(field,o.field);swap(colors,o.colors);swap(fields,o.fields);
     swap(preClimate,o.preClimate);swap(preFilter,o.preFilter);swap(preClimateCells,o.preClimateCells);swap(preFilterCells,o.preFilterCells);swap(inputsValid,o.inputsValid);swap(preClimateValid,o.preClimateValid);swap(preFilterValid,o.preFilterValid);swap(completedInputs,o.completedInputs);
+    swap(dwPending,o.dwPending);swap(dwConfig,o.dwConfig);swap(dwWorldSeed,o.dwWorldSeed);swap(dwLastSeeds,o.dwLastSeeds);swap(dwOrigRawField,o.dwOrigRawField);swap(dwOrigField,o.dwOrigField);swap(dwOrigColors,o.dwOrigColors);swap(dwOrigCells,o.dwOrigCells);swap(dwOrigParams,o.dwOrigParams);swap(dwOrigRevision,o.dwOrigRevision);swap(dwFocusCenter,o.dwFocusCenter);swap(dwHasFocus,o.dwHasFocus);swap(dwPreviewRadius,o.dwPreviewRadius);swap(dwPinnedFocus,o.dwPinnedFocus);swap(dwAppliedFocus,o.dwAppliedFocus);swap(dwHasAppliedFocus,o.dwHasAppliedFocus);swap(dwAppliedRadius,o.dwAppliedRadius);swap(dwAppliedPinned,o.dwAppliedPinned);swap(dwPreviouslyCarved,o.dwPreviouslyCarved);
+    if(!pipelineOwner&&o.pipelineOwner==this){
+        o.dwEngine.reset();o.dwEngineHash=0;o.dwEngineSeed=0;o.dwEngineBaseRev=0;o.dwEngineSeaLevel=0;o.dwEngineRes=0;
+        rebindDynamicWatersCallbacks();
+    }else{
+        swap(dwEngine,o.dwEngine);swap(dwEngineHash,o.dwEngineHash);swap(dwEngineSeed,o.dwEngineSeed);swap(dwEngineBaseRev,o.dwEngineBaseRev);swap(dwEngineSeaLevel,o.dwEngineSeaLevel);swap(dwEngineRes,o.dwEngineRes);
+        rebindDynamicWatersCallbacks();o.rebindDynamicWatersCallbacks();
+    }
     workActive=o.workActive=false;workSteps.clear();o.workSteps.clear();
 }
 std::string Surface::stepName(VkPipeline p)const{
     const Surface& o=pipelineOwner?*pipelineOwner:*this;
     for(size_t i=0;i<o.generate.size();++i)if(p==o.generate[i])return "terrain variant "+std::to_string(i);
     for(size_t i=0;i<worldFilters.size();++i)if(p==worldFilters[i])return "world filter "+std::to_string(i);
-    const std::pair<VkPipeline,const char*> named[]={{filter,"final filter"},{buildMountainCache,"mountain cache"},{buildMountainSegments,"mountain segments"},{buildWorldMap,"world map"},{buildOceanFloor,"ocean floor"},{buildIslandSurface,"island surface"},{buildClimate,"climate"},{buildRivers,"rivers"},{buildBiomes,"biomes"},{buildCorners,"surface corners"},{buildRecolor,"recolour"},{buildInspection,"inspection"}};
+    const std::pair<VkPipeline,const char*> named[]={{filter,"final filter"},{buildMountainCache,"mountain cache"},{buildMountainSegments,"mountain segments"},{buildWorldMap,"world map"},{buildOceanFloor,"ocean floor"},{buildIslandSurface,"island surface"},{buildClimate,"climate"},{buildRivers,"rivers"},{buildBiomes,"biomes"},{o.buildCorners,"surface corners"},{buildRecolor,"recolour"},{o.buildInspection,"inspection"}};
     for(auto& n:named)if(p==n.first)return n.second;
     return "other";
 }

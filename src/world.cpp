@@ -10,15 +10,16 @@ static uint32_t worldSeedInt(uint64_t value){
     if(value<=0x7fffffffull||value>=0xffffffff80000000ull)return static_cast<uint32_t>(value);
     value=(value^(value>>33))*static_cast<uint64_t>(-49064778989728563ll);value=(value^(value>>33))*static_cast<uint64_t>(-4265267296055464877ll);value^=value>>33;return static_cast<uint32_t>(value^(value>>32));
 }
-void buildUpliftInputs(const nlohmann::ordered_json& preset,int64_t seed,GraphSeeds& output,bool islands){
+void buildUpliftInputs(const nlohmann::ordered_json& preset,int64_t seed,GraphSeeds& output,bool islands,int ftfProfile){
     using Pointer=nlohmann::ordered_json::json_pointer;
     auto value=[&](const char* path,float fallback){auto p=Pointer(path);double v=preset.contains(p)?preset.at(p).get<double>():fallback;if(!std::isfinite(v)||std::abs(v)>std::numeric_limits<float>::max())throw std::runtime_error("Uplift cannot represent "+std::string(path));return static_cast<float>(v);};
     auto type=preset.at(Pointer("/world/continent/continentType")).get<std::string>();
     uint32_t kind=type=="UPLIFT"?0:type=="MULTI"?1:type=="SINGLE"?2:type=="MULTI_IMPROVED"?3:999;
     if(kind==999)throw std::runtime_error("Unknown FTF continent type: "+type);
-    auto shape=preset.at(Pointer("/world/continent/continentShape")).get<std::string>();uint32_t distance=shape=="EUCLIDEAN"?0:shape=="MANHATTAN"?1:shape=="NATURAL"?2:999;
+    auto shape=preset.contains(Pointer("/world/continent/continentShape"))?preset.at(Pointer("/world/continent/continentShape")).get<std::string>():std::string("EUCLIDEAN");uint32_t distance=shape=="EUCLIDEAN"?0:shape=="MANHATTAN"?1:shape=="NATURAL"?2:999;
     if(distance==999)throw std::runtime_error("Unknown FTF continent distance: "+shape);
     bool simple=kind==1||kind==2;
+    bool bridgedUplift=kind==0&&ftfProfile>=2;
     glm::vec4 continent{value("/world/continent/continentScale",4000),value("/world/continent/continentJitter",.8f),value("/world/continent/continentSkipping",.25f),value("/world/continent/continentSizeVariance",.25f)};
     glm::vec4 noise{value("/world/continent/continentNoiseOctaves",5),value("/world/continent/continentNoiseGain",.26f),value("/world/continent/continentNoiseLacunarity",4.33f),0};
     glm::vec4 points{value("/world/controlPoints/deepOcean",.102f),value("/world/controlPoints/shallowOcean",.13144f),value("/world/controlPoints/coast",.3576f),value("/world/controlPoints/inland",.4717f)};
@@ -30,13 +31,17 @@ void buildUpliftInputs(const nlohmann::ordered_json& preset,int64_t seed,GraphSe
     if(!(points.x<points.y&&points.y<points.z&&points.z<points.w&&points.w>0))throw std::runtime_error("Uplift paused: require Deep Ocean < Shallow Ocean < Coast < Inland and positive Inland");
     if(levels.w<=0||levels.x>100000000||levels.y>100000000)throw std::runtime_error("Uplift paused: world depth and ocean depth exceed the preview's noise domain");
     auto root=static_cast<uint64_t>(seed);
-    // Border plains consume root+0..4. Uplift uses +5..11. Climate consumes
-    // seven more parent seeds (+12..18) before deep ocean takes root+19.
+    // Border plains consume root+0..4. Uplift uses +5..11 (or +5..13 from 1.0.0024+ with bridgeSeed & tectonicSeed).
+    // Climate consumes seven more parent seeds before deep ocean, archipelago, and beachNoise.
+    uint64_t parentShift=bridgedUplift?2ull:0ull;
     output.worldSeeds0={worldSeedInt(root+5),worldSeedInt(root+6),worldSeedInt(root+7),worldSeedInt(root+8)};
-    output.worldSeeds1={worldSeedInt(root+9),worldSeedInt(root+10),worldSeedInt(root+11),worldSeedInt(root+19)};
+    output.worldSeeds1={worldSeedInt(root+9),worldSeedInt(root+10),worldSeedInt(root+11),worldSeedInt(root+parentShift+19)};
+    output.upliftSeeds=bridgedUplift?glm::uvec4{worldSeedInt(root+12),worldSeedInt(root+13),0u,0u}:glm::uvec4(0);
     noise.w=static_cast<float>(kind|(distance<<4));
     if(simple)output.worldSeeds1.w=worldSeedInt(root+16);
     output.continent=continent;output.continentNoise=noise;output.controlPoints=points;output.worldLevels=levels;
+    output.upliftExtra={value("/world/continent/macroWarpStrength",2.0f),value("/world/continent/coastalComplexity",1.0f),value("/world/continent/bridgeChance",1.0f),value("/world/continent/tectonicPlateUplift",.5f)};
+    output.upliftExtra2={value("/world/continent/tectonicRounding",1.0f),.75f,0.0f,0.0f};
     bool enabled=islands&&(!preset.contains(Pointer("/island/enableArchipelago"))||preset.at(Pointer("/island/enableArchipelago")).get<bool>());
     output.island0=output.island1=output.island2=output.island3=glm::vec4(0);output.islandMeta=glm::uvec4(0);
     if(!enabled)return;
@@ -45,35 +50,40 @@ void buildUpliftInputs(const nlohmann::ordered_json& preset,int64_t seed,GraphSe
     output.island2={value("/island/volcanoChance",.5f),value("/island/volcanismScale",.85f),value("/island/volcanismHorizontalScale",.7f),value("/island/mountainHorizontalScale",.7f)};
     output.island3={value("/island/offshoreDepth",.275f),value("/island/beachWidth",.225f),value("/island/beachCoverage",.6f),value("/island/macroDensityPercentage",1)};
     if(std::abs(output.island0.y)>1000000.0f)throw std::runtime_error("Island size exceeds the preview's integer noise domain");
-    output.islandMeta={1,worldSeedInt(root+(simple?17:20)),std::bit_cast<uint32_t>(value("/world/controlPoints/islandCoast",.074f)),0};
+    output.islandMeta={1,worldSeedInt(root+(simple?17:(20+parentShift))),std::bit_cast<uint32_t>(value("/world/controlPoints/islandCoast",.074f)),0};
+    output.biomeOptions.w=value("/world/controlPoints/islandInland",0.0f);
 }
 
-void buildClimateInputs(const nlohmann::ordered_json& preset,int64_t seed,GraphSeeds& output,bool enabled){
-    output.climateMeta=output.climateSeeds0=output.climateSeeds1=output.climateSeeds2=glm::uvec4(0);
-    output.climateShape=output.climateEdge=output.climateEffects=output.temperature0=output.temperature1=output.moisture0=output.moisture1=glm::vec4(0);
+void buildClimateInputs(const nlohmann::ordered_json& preset,int64_t seed,GraphSeeds& output,bool enabled,int ftfProfile){
+    output.climateMeta=output.climateSeeds0=output.climateSeeds1=output.climateSeeds2=output.climateExtraSeeds=glm::uvec4(0);
+    output.climateShape=output.climateEdge=output.climateEffects=output.temperature0=output.temperature1=output.moisture0=output.moisture1=output.climateErosion0=output.climateErosion1=glm::vec4(0);
     if(!enabled)return;
     using Pointer=nlohmann::ordered_json::json_pointer;
     auto value=[&](const std::string& path,float fallback){auto p=Pointer(path);double v=preset.contains(p)?preset.at(p).get<double>():fallback;if(!std::isfinite(v)||std::abs(v)>std::numeric_limits<float>::max())throw std::runtime_error("Climate cannot represent "+path);return static_cast<float>(v);};
     auto integer=[&](const std::string& path,int fallback){double v=value(path,static_cast<float>(fallback));if(v<std::numeric_limits<int32_t>::min()||v>2147483520.0||std::floor(v)!=v)throw std::runtime_error("Climate integer outside source domain: "+path);return static_cast<int>(v);};
     auto offset=[&](const std::string& path){auto p=Pointer(path);return preset.contains(p)?preset.at(p).get<int32_t>():0;};
-    auto root=static_cast<uint64_t>(seed);int continentKind=static_cast<int>(output.continentNoise.w)&3;uint64_t parent=root-((continentKind==1||continentKind==2)?3:0);uint64_t moistRoot=root+static_cast<uint64_t>(static_cast<int64_t>(offset("/climate/moisture/seedOffset"))),tempRoot=root+static_cast<uint64_t>(static_cast<int64_t>(offset("/climate/temperature/seedOffset")));
+    auto str=[&](const std::string& path,const std::string& fallback){auto p=Pointer(path);return preset.contains(p)&&preset.at(p).is_string()?preset.at(p).get<std::string>():fallback;};
+    auto noiseKind=[&](const std::string& t)->uint32_t{return t=="SIMPLEX"?0:t=="SIMPLEX2"||t=="SIMPLEX_RIDGE"?1:t=="PERLIN"?2:t=="PERLIN2"?3:t=="PERLIN_RIDGE"||t=="RIDGE"?4:t=="CONSTANT"||t=="CONST"?5:t=="BILLOW"?6:t=="VORONOI"||t=="CELL"?7:t=="VORONOI_EDGE"||t=="CELL_EDGE"?8:t=="CUBIC"?9:t=="SIN"?10:t=="WHITE"||t=="RAND"?11:999;};
+    auto root=static_cast<uint64_t>(seed);int continentKind=static_cast<int>(output.continentNoise.w)&3;int64_t parentShift=(continentKind==1||continentKind==2)?-3:(continentKind==0&&ftfProfile>=2?2:0);uint64_t parent=root+static_cast<uint64_t>(parentShift);uint64_t moistRoot=root+static_cast<uint64_t>(static_cast<int64_t>(offset("/climate/moisture/seedOffset"))),tempRoot=root+static_cast<uint64_t>(static_cast<int64_t>(offset("/climate/temperature/seedOffset"))),erosionRoot=root+static_cast<uint64_t>(static_cast<int64_t>(offset("/climate/erosion/seedOffset")));
     output.climateSeeds0={worldSeedInt(parent+12),worldSeedInt(parent+13),worldSeedInt(parent+14),worldSeedInt(parent+17)};
     output.climateSeeds1={worldSeedInt(parent+18),worldSeedInt(moistRoot),worldSeedInt(moistRoot+1),worldSeedInt(moistRoot+2)};
-    output.climateSeeds2={worldSeedInt(tempRoot),worldSeedInt(tempRoot+1),worldSeedInt(parent+15),0};
+    output.climateSeeds2={worldSeedInt(tempRoot),worldSeedInt(tempRoot+1),worldSeedInt(parent+15),worldSeedInt(parent+16)};
     const auto type=preset.at(Pointer("/climate/biomeEdgeShape/type")).get<std::string>();
-    uint32_t kind=type=="SIMPLEX"?0:type=="SIMPLEX2"||type=="SIMPLEX_RIDGE"?1:type=="PERLIN"?2:type=="PERLIN2"?3:type=="PERLIN_RIDGE"||type=="RIDGE"?4:type=="CONSTANT"||type=="CONST"?5:type=="BILLOW"?6:type=="VORONOI"||type=="CELL"?7:type=="VORONOI_EDGE"||type=="CELL_EDGE"?8:type=="CUBIC"?9:type=="SIN"?10:type=="WHITE"||type=="RAND"?11:999;
+    uint32_t kind=noiseKind(type),tempKind=noiseKind(str("/climate/temperature/type","SIN")),moistKind=noiseKind(str("/climate/moisture/type","SIMPLEX")),erosionKind=noiseKind(str("/climate/erosion/type","SIMPLEX"));
     if(kind==999)throw std::runtime_error("Climate paused: biome edge noise type "+type+" is not yet connected");
+    if(tempKind==999)tempKind=10;if(moistKind==999)moistKind=0;if(erosionKind==999)erosionKind=0;
+    output.climateExtraSeeds={worldSeedInt(erosionRoot),worldSeedInt(erosionRoot+1),worldSeedInt(erosionRoot+2),tempKind|(moistKind<<8)|(erosionKind<<16)};
     output.climateMeta={1,kind,static_cast<uint32_t>(integer("/world/properties/worldHeight",256)),0};
     uint64_t terrainRoot=root+static_cast<uint64_t>(static_cast<int64_t>(offset("/terrain/general/terrainSeedOffset")));
     output.biomeSeeds={worldSeedInt(terrainRoot+48291),worldSeedInt(terrainRoot+73519),worldSeedInt(root+48291),worldSeedInt(root+73519)};
     output.biomeSeeds2={worldSeedInt(terrainRoot+713+48291),worldSeedInt(terrainRoot+719+48291),worldSeedInt(parent+20),0};
-    output.biomeOptions={value("/world/controlPoints/beach",.221f),value("/terrain/general/mountainVariety",0),0,0};
+    output.biomeOptions={value("/world/controlPoints/beach",.221f),value("/terrain/general/mountainVariety",0),0,value("/world/controlPoints/islandInland",0.0f)};
 
     output.climateShape={value("/climate/biomeShape/biomeSize",586),value("/climate/biomeShape/biomeWarpScale",38),value("/climate/biomeShape/biomeWarpStrength",332),value("/climate/biomeShape/macroNoiseSize",4)};
     output.climateEdge={value("/climate/biomeEdgeShape/scale",137),value("/climate/biomeEdgeShape/octaves",5),value("/climate/biomeEdgeShape/lacunarity",10.5f),value("/climate/biomeEdgeShape/gain",1.601f)};
     output.climateEffects={value("/climate/altitudeCoolingStrength",2.2f),value("/climate/rainShadowStrength",1.8f),value("/climate/coastalMoistureBoost",.2f),value("/climate/biomeEdgeShape/strength",300)};
-    auto range=[&](const std::string& name,glm::vec4& first,glm::vec4& second){std::string path="/climate/"+name+"/";float a=value(path+"min",0),b=value(path+"max",1),lo=std::clamp(std::min(a,b),0.0f,1.0f),hi=std::clamp(std::max(a,b),lo,1.0f);first={value(path+"scale",4),value(path+"falloff",4),lo,hi};second={std::clamp(value(path+"bias",0),-1.0f,1.0f),value(path+"distributionBias",0),0,0};};
-    range("temperature",output.temperature0,output.temperature1);range("moisture",output.moisture0,output.moisture1);
+    auto range=[&](const std::string& name,glm::vec4& first,glm::vec4& second,float defaultFalloff){std::string path="/climate/"+name+"/";float a=value(path+"min",0),b=value(path+"max",1),lo=std::clamp(std::min(a,b),0.0f,1.0f),hi=std::clamp(std::max(a,b),lo,1.0f);first={value(path+"scale",4),value(path+"falloff",defaultFalloff),lo,hi};second={std::clamp(value(path+"bias",0),-1.0f,1.0f),value(path+"distributionBias",0),0,0};};
+    range("temperature",output.temperature0,output.temperature1,4.0f);range("moisture",output.moisture0,output.moisture1,4.0f);range("erosion",output.climateErosion0,output.climateErosion1,1.0f);
     if(output.climateShape.x<1||output.climateShape.y<1||output.climateShape.w<1||output.climateEdge.x<1||output.climateEdge.y<1||output.climateEdge.y>12||output.climateEdge.z<0||output.climateEdge.w<=0||output.temperature0.x<1||output.temperature0.x>536870880.0f||output.moisture0.x<1||output.moisture0.x>800000000.0f||output.temperature0.y<0||output.temperature0.y>64||output.moisture0.y<0||output.moisture0.y>64||output.climateMeta.z<=output.worldLevels.z)throw std::runtime_error("Climate paused: invalid source noise scale, octave/falloff count or world height span");
 }
 
@@ -81,7 +91,7 @@ void buildWorldFilterInputs(const nlohmann::ordered_json& preset,int64_t seed,Gr
     output.filter0=output.filter1=output.filter2=output.filter3=glm::vec4(0);output.filterMeta=glm::uvec4(0);output.filter4=output.filter5=glm::vec4(0);output.filterMeta2=glm::uvec4(0);
     // Per-version erosion constants (Erosion.java of each build): wavelength, gate start, gate span, depth cap per slope, headroom margin.
     constexpr float flatStart10=.15f,flatFull10=.6f,flatStart14=.05f,flatFull14=.15f;
-    const bool chunkFilters=ftfProfile==1;
+    const bool chunkFilters=ftfProfile>=1;
     output.filter4=chunkFilters?glm::vec4(300.0f,flatStart14,std::max(1e-5f,flatFull14-flatStart14),.08f):glm::vec4(96.0f,flatStart10,std::max(1e-5f,flatFull10-flatStart10),.5f);
     output.filter5=glm::vec4(chunkFilters?1.5f:.5f,0,0,0);
     // meta2: profile, table sine/cosine (1.0.0013+), ceiling in the terrain stage (1.0.0013+), bit0 = cliff relaxation + Phacelle erosion run (always, for the supported versions).
@@ -179,7 +189,7 @@ void buildSurfaceInputs(const nlohmann::ordered_json& preset,int64_t seed,GraphS
     output.scree0={value("/surface/erosion/rockVariance",30),value("/surface/erosion/rockMin",140),value("/surface/erosion/dirtVariance",40),value("/surface/erosion/dirtMin",95)};
     output.scree1={value("/surface/erosion/rockSteepness",.65f),value("/surface/erosion/dirtSteepness",.475f),value("/surface/erosion/screeSteepness",.4f),.023529412f};
     uint32_t flags=(toggle("/miscellaneous/erosionDecorator",toggle("/miscellaneous/screeDecorator",true))?1u:0u)|(toggle("/miscellaneous/strataDecorator",true)?2u:0u)|(toggle("/miscellaneous/naturalSnowDecorator",true)?4u:0u)|(toggle("/miscellaneous/smoothLayerDecorator",true)?8u:0u);
-    output.surfaceMeta={flags,output.climateSeeds0.w,worldSeedInt(static_cast<uint64_t>(seed)),0};
+    output.surfaceMeta={flags,output.climateSeeds2.w,worldSeedInt(static_cast<uint64_t>(seed)),0};
     output.surfaceOptions={value("/miscellaneous/strataRegionSize",889),value("/world/properties/worldHeight",512),0,0};
     if((flags&2u)&&(output.surfaceOptions.x<4||output.surfaceOptions.x>2147483520.0f))throw std::runtime_error("Strata region size must be at least 4 (FTF warps at size/4)");
     if(flags&2u)buildStrata(seed,int(output.surfaceOptions.x),output);

@@ -19,11 +19,17 @@ inline std::vector<uint32_t> loadBiomeTableWords(const std::filesystem::path& as
     return words;
 }
 
-inline bool biomeTableHasFooter(const std::vector<uint32_t>& w){return w.size()>=16&&w[w.size()-8]==0x4654464du;}
+inline size_t biomeTableFooter(const std::vector<uint32_t>& w){
+    if(w.size()>=16&&w.back()==0x504D534Bu){size_t f=size_t(w[w.size()-3]);if(f+8<=w.size()&&w[f]==0x4654464du)return f;}
+    if(w.size()>=16&&w[w.size()-8]==0x4654464du)return w.size()-8;
+    return SIZE_MAX;
+}
+
+inline bool biomeTableHasFooter(const std::vector<uint32_t>& w){return biomeTableFooter(w)!=SIZE_MAX;}
 
 inline uint32_t canonicalBiomeId(const std::vector<uint32_t>& w,uint32_t biome){   // canonicalBiome() in biomes.comp
-    if(biome>=w[1])return 0xffffffffu;if(!biomeTableHasFooter(w))return biome;
-    uint32_t alias=w[w[w.size()-8+6]+biome];return (alias&131072u)?alias&65535u:biome;
+    if(biome>=w[1])return 0xffffffffu;size_t footer=biomeTableFooter(w);if(footer==SIZE_MAX)return biome;
+    uint32_t alias=w[w[footer+6]+biome];return (alias&131072u)?alias&65535u:biome;
 }
 
 inline void collectTreeLeaves(const std::vector<uint32_t>& w,uint32_t root,std::vector<bool>& out){
@@ -38,19 +44,27 @@ inline void collectTreeLeaves(const std::vector<uint32_t>& w,uint32_t root,std::
 inline std::vector<bool> possibleBiomes(const std::vector<uint32_t>& w,uint32_t mask){
     std::vector<bool> vanilla(w[1],false),out(w[1],false);
     collectTreeLeaves(w,w[2],vanilla);collectTreeLeaves(w,w[3],vanilla);
-    if(!biomeTableHasFooter(w))mask=0;
-    size_t footer=w.size()-8;
-    if(mask&1u)collectTreeLeaves(w,w[footer+1],out);else out=vanilla;
+    size_t footer=biomeTableFooter(w);
+    if(footer==SIZE_MAX)mask=0;
+    if(mask&1u)collectTreeLeaves(w,w[footer+1],out);
+    else if(mask&32u){uint32_t rg=w[footer+5];if(rg>0&&rg+24<=footer&&w[rg]==0x52474E53u&&w[rg+23]!=0xffffffffu)collectTreeLeaves(w,w[rg+23],out);else out=vanilla;}
+    else out=vanilla;
     if(mask&2u)for(uint32_t v=1;v<=3;++v)collectTreeLeaves(w,w[footer+1+v],out);
-    if(mask&4u){
-        // modRuleMatches() tests the raw vanilla id against the rule's source bits; collect raw ids for that.
-        std::vector<bool> rawVanilla(w[1],false);
-        std::vector<uint32_t> stack{w[2],w[3]};
-        while(!stack.empty()){uint32_t node=stack.back();stack.pop_back();size_t offset=8+size_t(node)*16;int children=int(w[offset+15]);uint32_t first=w[offset+14];if(children<0){if(first<rawVanilla.size())rawVanilla[first]=true;}else for(int i=0;i<children;++i)stack.push_back(first+uint32_t(i));}
-        uint32_t data=w[footer+5],count=w[data];
-        for(uint32_t i=0;i<count;++i){size_t at=data+1+size_t(i)*20;bool source=false;
-            for(uint32_t base=0;base<64&&base<rawVanilla.size();++base)if(rawVanilla[base]&&(base<32?(w[at+1]>>base)&1u:(w[at+2]>>(base-32))&1u))source=true;
-            if(source){auto id=canonicalBiomeId(w,w[at]);if(id<out.size())out[id]=true;}}
+    if((mask&4u)||(mask&8u)){
+        uint32_t rg=w[footer+5];
+        if(rg>0&&rg+24<=footer&&w[rg]==0x52474E53u){
+            if(mask&4u){
+                for(uint32_t i=0;i<w[rg+7];++i){auto id=canonicalBiomeId(w,w[w[rg+8]+size_t(i)*14]);if(id<out.size())out[id]=true;}
+                for(uint32_t i=0;i<w[rg+22];++i){auto id=canonicalBiomeId(w,w[w[rg+10]+size_t(i)*16]);if(id<out.size())out[id]=true;}
+            }
+            if(mask&8u){
+                for(uint32_t k=0;k<5;++k){
+                    if(w[rg+11+k]!=0xffffffffu)collectTreeLeaves(w,w[rg+11+k],out);
+                    if(w[rg+16+k]!=0xffffffffu)collectTreeLeaves(w,w[rg+16+k],out);
+                }
+                for(uint32_t i=w[rg+22];i<w[rg+9];++i){auto id=canonicalBiomeId(w,w[w[rg+10]+size_t(i)*16]);if(id<out.size())out[id]=true;}
+            }
+        }
     }
     return out;
 }

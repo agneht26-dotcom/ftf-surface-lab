@@ -1,0 +1,12 @@
+{
+  "where": {
+    "biomes": ["minecraft:meadow", "minecraft:cherry_grove"]
+  },
+  "rapids": ["minecraft:gravel*4", "minecraft:stone", "minecraft:cobblestone", "minecraft:calcite"],
+  "silt": ["minecraft:clay*3", "minecraft:gravel*2", "minecraft:sand"],
+  "shore": ["keep*5", "minecraft:coarse_dirt*2", "minecraft:gravel"],
+  "bars": ["minecraft:gravel*3", "minecraft:sand"],
+  "flats": ["keep*3", "minecraft:coarse_dirt", "minecraft:gravel"],
+  "patch_size": 5,
+  "shore_height": 1
+}

@@ -1,0 +1,106 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_fp64 : require
+#extension GL_ARB_gpu_shader_int64 : require
+#define FTF_MAP_PASS
+#include "shared.glsl"
+#include "ftf_terrain.glsl"
+#include "ftf_regions.glsl"
+#include "ftf_world.glsl"
+#include "cell_state.glsl"
+#include "ftf_sin.glsl"
+#include "material_spline_generated.glsl"
+layout(local_size_x=8,local_size_y=8) in;
+layout(std430,set=0,binding=17) buffer CornerLevels {int levels[];} corners;
+layout(rgba32f,set=0,binding=0) uniform readonly image2D rawField;
+layout(push_constant) uniform Params {uvec4 meta;vec4 domain;vec4 land;vec4 detail;vec4 climate;uvec4 seeds0;uvec4 seeds1;vec4 ftfScales;} p;
+float biomeContinentalness(vec2 world,vec4 field,uint index){
+    uint type=cells[index].terrain&255u;float edge=field.y,deep=graph.controlPoints.x,shallow=graph.controlPoints.y,beach=graph.biomeOptions.x,coast=graph.controlPoints.z,inland=graph.controlPoints.w;
+    float normalized=worldDiv(field.x,graph.worldLevels.w),water=worldDiv(min(graph.worldLevels.z-1.0,graph.worldLevels.w),graph.worldLevels.w);
+    if(graph.filterMeta2.x>=3u){
+        bool isHydrology=type==10u||type==11u||type==12u;
+        if(normalized<=water&&!isHydrology&&(graph.filterMeta2.x<4u||edge<=beach)){
+            float oceanDepth=max(10.0,graph.worldLevels.x),floorH=water-worldDiv(oceanDepth,graph.worldLevels.w);
+            float hNorm=water>floorH?clamp(worldDiv(normalized-floorH,water-floorH),0.0,1.0):1.0;
+            float shallowBlocks=min(22.0,oceanDepth*.4),hSplit=1.0-shallowBlocks/oceanDepth;
+            if(hNorm<=hSplit){float t=hSplit>0.0?hNorm/hSplit:1.0;return ftfLerp(-1.045,-.455,t);}
+            float t=hSplit<1.0?(hNorm-hSplit)/(1.0-hSplit):0.0;return ftfLerp(-.455,-.191,t);
+        }
+        if(graph.filterMeta2.x>=4u&&type==13u&&normalized>water){
+            float islandInland=graph.biomeOptions.w,islandCoast=uintBitsToFloat(graph.islandMeta.z);
+            if(islandCoast<=islandInland)return (-1.20-1.05)*.5;
+            float mt=clamp((islandCoast-edge)/(islandCoast-islandInland),0.0,1.0),ratioInland=islandCoast>0.0?clamp(islandInland/islandCoast,.05,.95):.5;
+            float cSplit=ftfLerp(-1.05,-1.20,1.0-ratioInland),tBoundary=1.0-ratioInland;
+            if(mt<=tBoundary)return ftfLerp(-1.05,cSplit,tBoundary>0.0?mt/tBoundary:0.0);
+            return ftfLerp(cSplit,-1.20,(1.0-tBoundary)>0.0?(mt-tBoundary)/(1.0-tBoundary):1.0);
+        }
+        float coastStart=-.185;bool isMountain=type==2u||type==3u||type==9u;
+        if(type==7u||type==9u||(graph.filterMeta2.x>=4u&&type==14u)){
+            if(isMountain)return -.11;
+            if(type==6u||type==8u||(graph.filterMeta2.x>=4u&&type==14u)||edge<=coast){if(coast<=beach)return (-.19-.11)*.5;return ftfLerp(coastStart,-.11,clamp((edge-beach)/(coast-beach),0.0,1.0));}
+            if(inland<=coast)return (-.11+.03)*.5;
+            return ftfLerp(-.11,.03,clamp((edge-coast)/(inland-coast),0.0,1.0));
+        }
+        if(isMountain&&edge<=coast)return -.11;
+        if(edge<=beach)return coastStart;
+        if(edge<=coast){if(coast<=beach)return (-.19-.11)*.5;return ftfLerp(coastStart,-.11,clamp((edge-beach)/(coast-beach),0.0,1.0));}
+        if(edge<=inland){if(inland<=coast)return (-.11+.03)*.5;return ftfLerp(-.11,.03,clamp((edge-coast)/(inland-coast),0.0,1.0));}
+        if(inland>=1.0)return .03;
+        float t=clamp((edge-inland)/(1.0-inland),0.0,1.0),midSplit=.35;
+        if(t<=midSplit)return ftfLerp(.03,.30,t/midSplit);
+        return ftfLerp(.30,1.0,(t-midSplit)/(1.0-midSplit));
+    }
+    bool offshore=normalized<=water&&edge<beach&&type!=10u&&type!=11u&&type!=12u;
+    if(type==4u||(offshore&&edge<=deep)){if(deep<=0.0)return (-1.05-.455)*.5;float alpha=clamp(edge,0.0,deep)/deep;return min(-.4551,ftfLerp(-1.05+.05,-.455,alpha));}
+    if(type==5u){if(shallow<=deep)return (-.455-.19)*.5;float alpha=ftfMap(edge,deep,shallow)*.98;return max(-.4549,ftfLerp(-.455,-.19,alpha));}
+    if(offshore){if(beach<=deep)return (-.455-.19)*.5;float alpha=ftfMap(edge,deep,beach)*.98;return max(-.4549,ftfLerp(-.455,-.19,alpha));}
+    if(type==8u){float beachNoise=worldPerlin(world,graph.biomeSeeds2.z,20,1,2.0,.5)*5.0;if(field.x+beachNoise<min(graph.worldLevels.z-1.0,graph.worldLevels.w)+5.0)return ftfLerp(-.19,-.11,ftfMap(edge,shallow,beach));}
+    return ftfLerp((-.11+.03)*.5,1.0,ftfMap(edge,beach,inland));
+}
+float biomeWeirdness(vec4 field,uint index){
+    float w=cells[index].weirdness;
+    if(graph.filterMeta2.x<4u)return w;
+    uint type=cells[index].terrain&255u;float normalized=worldDiv(field.x,graph.worldLevels.w),water=worldDiv(min(graph.worldLevels.z-1.0,graph.worldLevels.w),graph.worldLevels.w);
+    bool isHydrology=((cells[index].terrain&256u)!=0u)||type==10u||type==11u||type==12u;
+    if(normalized>water&&!isHydrology){
+        bool isMountain=type==2u||type==3u||type==9u;
+        bool isCoast=!isMountain&&type!=13u&&(type==6u||type==8u||type==14u||field.y<=graph.controlPoints.z);
+        if(isCoast)return -.15;
+        if(w>=-.05&&w<=.05)return w<0.0?-.055:.055;
+    }
+    return w;
+}
+int cornerBound(){return int(p.domain.x/16.0)+5;}
+bool cornerUse(){return graph.biomeSeeds2.w==3u&&p.domain.x<=8.1*float(p.meta.x-1u)&&(cornerBound()+7)/8*8<=1024;}
+ivec2 cornerOrigin(){return (ivec2(floor(p.domain.yz-p.domain.x*.5))>>4)-1;}
+int materialPreliminary(ivec2 b,vec2 matPoint,vec2 matSample,float matStep){
+    uint n=p.meta.x;ivec2 c=clamp(ivec2(round(matPoint+(vec2(b)-matSample)*matStep)),ivec2(0),ivec2(int(n)-1));uint i=uint(c.y)*n+uint(c.x);
+    vec4 field=imageLoad(rawField,c);vec2 world=(vec2(dvec2(c)/double(n-1))-.5)*p.domain.x+p.domain.yz;
+    double factor=mcFactor(biomeContinentalness(world,field,i),cells[i].erosion,biomeWeirdness(field,i));
+    double R=double(graph.worldLevels.w),scaled=double(worldDiv(field.x,graph.worldLevels.w))*R,truncated=scaled<0.0LF?ceil(scaled):floor(scaled);precise double unit=(truncated+1.0LF)/R;
+    precise double offset=-1.0037500858306885LF+2.0LF*unit;
+    int depth=int(graph.worldLevels.y),top=int(graph.surfaceOptions.y);double from=double(1.0+float(depth)/128.0),to=double(1.0-float(top)/128.0);
+    int first=top;
+    if(factor>=0.0LF&&top>=-depth+24){int lo=0,hi=(top-(-depth+24))/8+1;
+        while(lo<hi){int k=(lo+hi)/2,y=top-8*k;
+            precise double t=(double(y)-double(-depth))/(double(top)-double(-depth));precise double gradient=t<0.0LF?from:t>1.0LF?to:from+t*(to-from);
+            precise double d=gradient+offset;precise double m=d*factor;m=m>0.0LF?m:m*.25LF;precise double v=4.0LF*m;v=v+-0.703125LF;v=clamp(v,-64.0LF,64.0LF);
+            precise double slid=1.0LF*(v+-0.1171875LF);slid=slid+0.1171875LF;
+            if(slid>0.390625LF)hi=k;else lo=k+1;}
+        first=top-8*lo;}
+    for(int y=first;y>=-depth;y-=8){
+        precise double t=(double(y)-double(-depth))/(double(top)-double(-depth));precise double gradient=t<0.0LF?from:t>1.0LF?to:from+t*(to-from);
+        precise double d=gradient+offset;precise double m=d*factor;m=m>0.0LF?m:m*.25LF;precise double v=4.0LF*m;v=v+-0.703125LF;v=clamp(v,-64.0LF,64.0LF);
+        precise double s=(double(y)-double(-depth))/(double(-depth+24)-double(-depth));s=s<0.0LF?0.0LF:s>1.0LF?1.0LF:s;precise double slid=s*(v+-0.1171875LF);slid=slid+0.1171875LF;
+        if(slid>0.390625LF)return y;
+    }
+    return 2147483647;
+}
+void main(){
+    if(!cornerUse())return;ivec2 k=ivec2(gl_GlobalInvocationID.xy);int b=cornerBound();if(any(greaterThanEqual(k,ivec2(b))))return;
+    ivec2 corner=(cornerOrigin()+k)<<4;uint n=p.meta.x;float matStep=float(n-1u)/p.domain.x;
+    ivec2 s=clamp(ivec2(round((vec2(corner)-(p.domain.yz-p.domain.x*.5))*matStep)),ivec2(0),ivec2(int(n)-1));
+    precise vec2 fraction=vec2(dvec2(s)/double(n-1)),world=(fraction-.5)*p.domain.x+p.domain.yz;
+    corners.levels[k.y*b+k.x]=materialPreliminary(corner,vec2(s),world,matStep);
+}
+

@@ -25,8 +25,10 @@ $env:TEMP = $taskTemp
 $env:TMP = $taskTemp
 $cmake = Join-Path $PSScriptRoot '.tools\cmake\bin\cmake.exe'
 if (-not (Test-Path -LiteralPath $cmake)) { throw 'Run build.ps1 -Bootstrap first' }
-& $cmake -S . -B build -G 'NMake Makefiles' -DCMAKE_BUILD_TYPE=Release
-if ($LASTEXITCODE -ne 0) { throw 'CMake configuration failed' }
+if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'build\CMakeCache.txt'))) {
+    & $cmake -S . -B build -G 'NMake Makefiles' -DCMAKE_BUILD_TYPE=Release
+    if ($LASTEXITCODE -ne 0) { throw 'CMake configuration failed' }
+}
 & $cmake --build build
 if ($LASTEXITCODE -ne 0) { throw 'Compilation failed' }
 if ($Run) { & (Join-Path $PSScriptRoot 'build\FTFSurface.exe') }

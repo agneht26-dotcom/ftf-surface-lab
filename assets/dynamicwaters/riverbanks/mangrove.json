@@ -1,0 +1,12 @@
+{
+  "where": {
+    "biomes": ["minecraft:mangrove_swamp"]
+  },
+  "rapids": ["minecraft:mud*4", "minecraft:muddy_mangrove_roots", "minecraft:clay"],
+  "silt": ["minecraft:mud*5", "minecraft:clay"],
+  "shore": ["minecraft:mud*3", "minecraft:muddy_mangrove_roots*2", "keep*2"],
+  "bars": ["minecraft:mud*2", "minecraft:sand"],
+  "flats": ["minecraft:mud*3", "keep*2", "minecraft:muddy_mangrove_roots"],
+  "patch_size": 5,
+  "shore_height": 2
+}

@@ -1,0 +1,9 @@
+{
+  "rapids": ["minecraft:gravel*5", "minecraft:cobblestone*2", "minecraft:stone", "minecraft:mossy_cobblestone"],
+  "silt": ["minecraft:sand*4", "minecraft:clay*2", "minecraft:gravel*2"],
+  "shore": ["keep*6", "minecraft:gravel", "minecraft:sand"],
+  "bars": ["minecraft:sand*3", "minecraft:gravel"],
+  "flats": ["keep*3", "minecraft:sand*2", "minecraft:gravel"],
+  "patch_size": 5,
+  "shore_height": 1
+}

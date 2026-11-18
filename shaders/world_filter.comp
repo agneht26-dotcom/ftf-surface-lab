@@ -49,10 +49,18 @@ void main(){
         imageStore(intermediate,ivec2(q),vec4(sx,sz,sqrt(sx*sx+sz*sz+.0000000001),envelope));return;
     }
     if(PHASE==3u){float value=sampleGrid(point,true).z;for(int y=-2;y<=2;++y)for(int x=-2;x<=2;++x)value=min(value,sampleGrid(point+vec2(x,y)*block,true).z);cells[index].gateMin=value;return;}
-    if(PHASE==4u){vec4 field=imageLoad(rawField,ivec2(q)),aux=imageLoad(intermediate,ivec2(q));float height=worldDiv(field.x,factor),water=worldDiv(min(graph.worldLevels.z-1.0,factor),factor);if((cells[index].terrain&256u)!=0u)return;
+    if(PHASE==4u){vec4 field=imageLoad(rawField,ivec2(q)),aux=imageLoad(intermediate,ivec2(q));float height=worldDiv(field.x,factor),water=worldDiv(min(graph.worldLevels.z-1.0,factor),factor),ground=worldDiv(min(graph.worldLevels.z,factor),factor);if((cells[index].terrain&256u)!=0u||(graph.filterMeta2.x>=4u&&height<=ground)){if(graph.filterMeta2.x>=2u){cells[index].sediment=-.5;cells[index].weirdness=0.0;}return;}
         float sum=0.0,count=0.0;for(int y=-2;y<=2;++y)for(int x=-2;x<=2;++x){vec2 pos=point+vec2(x,y)*block;if(any(lessThan(pos,vec2(0)))||any(greaterThan(pos,vec2(n-1))))continue;sum+=gateAt(pos);count+=1.0;}
         float sediment=cells[index].sediment,delta=filterErosionDelta(noiseWorld,height,aux.xy,worldDiv(sum,max(count,1.0)),aux.w,modifierAt(index,height,world),sediment);cells[index].sediment=sediment;float result=height+delta;
-        if(height>water&&result<=water)result=worldDiv(min(graph.worldLevels.z,factor),factor);field.x=result*factor;imageStore(rawField,ivec2(q),field);return;
+        if(height>water&&result<=water)result=ground;field.x=result*factor;imageStore(rawField,ivec2(q),field);
+        if(graph.filterMeta2.x>=4u){
+            uint t=cells[index].terrain&255u;float wl=cells[index].waterHeight>0.0?cells[index].waterHeight:water;
+            bool isWater=(cells[index].terrain&256u)!=0u||result<=ground||((t==10u||t==11u||t==12u)&&result<=wl);
+            if(isWater){cells[index].sediment=-.5;cells[index].weirdness=0.0;}
+            else if(graph.filterMeta2.x>=5u){cells[index].weirdness=ftfReferenceWeirdness(sediment,uintBitsToFloat(cells[index].biome));}
+            else{float mag=clamp(sediment+.5,.055,1.0);cells[index].weirdness=((cells[index].terrain&512u)!=0u?1.0:-1.0)*mag;}
+        }else if(graph.filterMeta2.x>=2u){if(result<=ground){cells[index].sediment=-.5;cells[index].weirdness=0.0;}else{float mag=clamp(sediment+.5,0.0,1.0);cells[index].weirdness=((cells[index].terrain&512u)!=0u?1.0:-1.0)*mag;}}
+        return;
     }
     if(PHASE==7u){float current=normHeight(point,false),gradient=0.0,water=worldDiv(min(graph.worldLevels.z-1.0,factor),factor);
         for(int y=-1;y<=2;++y)for(int x=-1;x<=2;++x){if(x==0&&y==0)continue;vec2 pos=point+vec2(x,y)*block;if(any(lessThan(pos,vec2(0)))||any(greaterThan(pos,vec2(n-1))))continue;gradient+=abs(current-max(normHeight(pos,false),water));}cells[index].gateMin=gradient*10.0;

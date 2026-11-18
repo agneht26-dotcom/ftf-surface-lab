@@ -1,0 +1,16 @@
+{
+  "where": {
+    "biomes": ["minecraft:windswept_hills", "minecraft:windswept_gravelly_hills", "minecraft:windswept_forest",
+      "minecraft:stony_peaks"],
+    "tags": ["c:is_mountain", "c:is_windswept", "c:is_hill"],
+    "not": ["#c:is_snowy"]
+  },
+  "rapids": ["minecraft:gravel*4", "minecraft:cobblestone*3", "minecraft:stone*2", "minecraft:andesite*2",
+    "minecraft:mossy_cobblestone"],
+  "silt": ["minecraft:gravel*4", "minecraft:sand", "minecraft:clay"],
+  "shore": ["keep*4", "minecraft:gravel*3", "minecraft:stone"],
+  "bars": ["minecraft:gravel*4", "minecraft:sand"],
+  "flats": ["minecraft:gravel*2", "keep*2"],
+  "patch_size": 4,
+  "shore_height": 1
+}

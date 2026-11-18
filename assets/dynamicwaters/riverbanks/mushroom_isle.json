@@ -1,0 +1,13 @@
+{
+  "where": {
+    "biomes": ["minecraft:mushroom_fields"],
+    "tags": ["c:is_mushroom"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:clay"],
+  "silt": ["minecraft:clay*2", "minecraft:gravel*2", "minecraft:mud"],
+  "shore": ["keep*5", "minecraft:mud", "minecraft:gravel"],
+  "bars": ["minecraft:gravel*2", "minecraft:sand"],
+  "flats": ["keep*3", "minecraft:mud"],
+  "patch_size": 5,
+  "shore_height": 1
+}

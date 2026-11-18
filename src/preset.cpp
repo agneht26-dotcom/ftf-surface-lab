@@ -27,6 +27,7 @@ static void finiteNumbers(const PresetJson& value){
     if(value.is_structured())for(auto& item:value)finiteNumbers(item);
 }
 static constexpr const char* islandOptionalFields[]={"enableArchipelago","islandDensity","islandSize","islandHeight","islandBaseScale","islandVerticalScale","islandHorizontalScale","mountainChance","volcanoChance","mountainScale","volcanismScale","volcanismHorizontalScale","mountainHorizontalScale","offshoreDepth","beachWidth","beachCoverage","macroDensityPercentage"};
+static constexpr const char* continentOptionalFields[]={"bridgeChance","tectonicPlateUplift","tectonicRounding","macroWarpStrength","coastalComplexity"};
 static constexpr const char* erosionOptionalFields[]={"scale","strengthMultiplier","gullySharpness","flowOctaves","lacunarity","gain","phacelleScale","phacelleOffset","phacelleNormalization","slopeOnsetBase","slopeOnsetRidge","slopeOnsetOctave","roundingMin","roundingMax"};
 static std::optional<PresetJson> optionalPresetDefault(const std::string& path){
     // Preset.DIRECT_CODEC's optional SurfaceSettings default, not the modern template.
@@ -40,7 +41,16 @@ static std::optional<PresetJson> optionalPresetDefault(const std::string& path){
     if(path=="/climate/coastalMoistureBoost")return PresetJson(.2);
     if(path=="/climate/temperature/distributionBias"||path=="/climate/moisture/distributionBias")return PresetJson(0.0);
     if(path=="/world/continent/continentNoiseOctaves")return PresetJson(5);
+    if(path=="/world/continent/bridgeChance")return PresetJson(1.0);
+    if(path=="/world/continent/tectonicPlateUplift")return PresetJson(.5);
+    if(path=="/world/continent/tectonicRounding")return PresetJson(1.0);
+    if(path=="/world/continent/macroWarpStrength")return PresetJson(2.0);
+    if(path=="/world/continent/coastalComplexity")return PresetJson(1.0);
     if(path=="/world/properties/worldDepth")return PresetJson(64);
+    if(path=="/miscellaneous/snowCoversSmallPlants")return PresetJson(true);
+    if(path=="/terrain/general/legacyMountainScaling")return PresetJson(true);
+    if(path=="/terrain/general/mountainVariety")return PresetJson(0.0);
+    if(path=="/presentation/presetName")return PresetJson("");
     if(path=="/island/enableArchipelago")return PresetJson(true);
     if(path=="/island/islandDensity")return PresetJson(.4);
     if(path=="/island/islandSize")return PresetJson(150.0);
@@ -64,17 +74,71 @@ void PresetDocument::load(const std::filesystem::path& path){
     else{std::ifstream input(path);if(!input)throw std::runtime_error("Cannot open preset: "+path.string());input>>parsed;
         if(path.filename()=="preset.json"&&std::filesystem::exists(path.parent_path()/"source.zip"))pack=Datapack::read(path.parent_path()/"source.zip");}
     for(auto section:{"world","terrain","climate","rivers"})if(!parsed.contains(section)||!parsed[section].is_object())throw std::runtime_error("Not an FTF preset: missing "+std::string(section));
-    finiteNumbers(parsed);std::optional<float> extent;std::optional<int64_t> seed;auto titleUtf8=path.stem().u8string();std::string title(titleUtf8.begin(),titleUtf8.end());
+    std::optional<float> extent;std::optional<int64_t> seed;std::optional<std::string> srcVer;auto titleUtf8=path.stem().u8string();std::string title(titleUtf8.begin(),titleUtf8.end());
     auto metadata=path.parent_path()/(path.stem().string()+".metadata.json");
-    if(std::filesystem::exists(metadata)){std::ifstream meta(metadata);PresetJson info;meta>>info;if(info.contains("world_seed")&&info["world_seed"].is_number_integer())seed=info["world_seed"].get<int64_t>();if(info.contains("name")&&info["name"].is_string())title=info["name"];if(info.contains("preview_extent")&&info["preview_extent"].is_number()){float v=info["preview_extent"];if(std::isfinite(v)&&v>0)extent=v;}}
-    if(!seed&&pack&&pack->files.contains("surfacelab.json")){auto info=PresetJson::parse(pack->files.at("surfacelab.json"));if(info.contains("world_seed")&&info["world_seed"].is_number_integer())seed=info["world_seed"].get<int64_t>();}
-    data=std::move(parsed);source=path;name=std::move(title);worldSeed=seed;previewExtent=extent;datapack=std::move(pack);markSaved();
+    if(std::filesystem::exists(metadata)){std::ifstream meta(metadata);PresetJson info;meta>>info;if(info.contains("world_seed")&&info["world_seed"].is_number_integer())seed=info["world_seed"].get<int64_t>();if(info.contains("name")&&info["name"].is_string())title=info["name"];if(info.contains("preview_extent")&&info["preview_extent"].is_number()){float v=info["preview_extent"];if(std::isfinite(v)&&v>0)extent=v;}if(info.contains("ftf_version")&&info["ftf_version"].is_string()){auto v=info["ftf_version"].get<std::string>();if(!v.empty())srcVer=v;}}
+    if(path.filename()=="preset.json"&&std::filesystem::exists(path.parent_path()/"preset.metadata.json")){std::ifstream meta(path.parent_path()/"preset.metadata.json");PresetJson info;meta>>info;if(info.contains("ftf_version")&&info["ftf_version"].is_string()){auto v=info["ftf_version"].get<std::string>();if(!v.empty())srcVer=v;}}
+    if(pack&&pack->files.contains("surfacelab.json")){auto info=PresetJson::parse(pack->files.at("surfacelab.json"));if(!seed&&info.contains("world_seed")&&info["world_seed"].is_number_integer())seed=info["world_seed"].get<int64_t>();if(!srcVer&&info.contains("ftf_version")&&info["ftf_version"].is_string()){auto v=info["ftf_version"].get<std::string>();if(!v.empty())srcVer=v;}}
+    data=std::move(parsed);source=path;name=std::move(title);sourceFtfVersion=std::move(srcVer);worldSeed=seed;previewExtent=extent;datapack=std::move(pack);markSaved();
 }
-void PresetDocument::exportDatapack(const std::filesystem::path& path,const std::filesystem::path& fallback)const{
+void PresetDocument::exportDatapack(const std::filesystem::path& path,const std::filesystem::path& fallback,const std::string& ftfVersion)const{
     if(!loaded())throw std::runtime_error("Import a preset first");finiteNumbers(data);
     auto pack=datapack?*datapack:Datapack::read(fallback);pack.update(data,Datapack::read(fallback.parent_path()/"ftf-default-datapack.zip"));
     PresetJson metadata={{"application","FTF Surface Lab"},{"erosion_engine","FTF 22-Oct Phacelle world filter"}};
+    if(!ftfVersion.empty())metadata["ftf_version"]=ftfVersion;
     if(worldSeed)metadata["world_seed"]=*worldSeed;pack.files["surfacelab.json"]=metadata.dump(2)+"\n";pack.write(path);
+}
+PresetVersionWarning checkPresetVersionCompatibility(const PresetDocument& doc,const std::string& activeVersion){
+    PresetVersionWarning out{};
+    if(!doc.loaded()||activeVersion.empty())return out;
+    const auto& d=doc.data;
+    const bool activeLegacy=(activeVersion=="1.0.0010"||activeVersion=="1.0.0013");
+    const bool activeLatest=(activeVersion=="1.0.0032");
+    bool hasModern25=false,hasModern32=false;
+    if(d.contains("climate")&&d["climate"].is_object()){
+        const auto& c=d["climate"];
+        if(c.contains("erosion"))hasModern25=true;
+        for(const char* k:{"temperature","moisture"})if(c.contains(k)&&c[k].is_object()&&(c[k].contains("type")||c[k].contains("distributionBias")))hasModern25=true;
+    }
+    if(d.contains("world")&&d["world"].is_object()){
+        const auto& w=d["world"];
+        if(w.contains("continent")&&w["continent"].is_object()){
+            const auto& ct=w["continent"];
+            for(const char* k:{"bridgeChance","tectonicPlateUplift","tectonicRounding","macroWarpStrength","coastalComplexity"})if(ct.contains(k))hasModern25=true;
+        }
+        if(w.contains("controlPoints")&&w["controlPoints"].is_object()&&w["controlPoints"].contains("islandInland"))hasModern25=true;
+    }
+    if(d.contains("miscellaneous")&&d["miscellaneous"].is_object()&&d["miscellaneous"].contains("snowCoversSmallPlants"))hasModern32=true;
+    if(d.contains("presentation")&&d["presentation"].is_object()&&d["presentation"].contains("presetName"))hasModern32=true;
+    bool cheese015=false,cheeseLegacy=false;
+    if(d.contains("caves")&&d["caves"].is_object()&&d["caves"].contains("cheeseCaveDepthOffset")&&d["caves"]["cheeseCaveDepthOffset"].is_number()){
+        double cv=d["caves"]["cheeseCaveDepthOffset"].get<double>();
+        if(std::abs(cv-0.15)<1e-3)cheese015=true;
+        else if(std::abs(cv-1.5625)<1e-3)cheeseLegacy=true;
+    }
+    if(doc.sourceFtfVersion&&!doc.sourceFtfVersion->empty()){
+        const auto& src=*doc.sourceFtfVersion;
+        if(src!=activeVersion){
+            out.mismatch=true;
+            out.detectedVersion=src;
+            out.summary="Loaded preset is for FTF "+src+", while this session is running FTF "+activeVersion+". Terrain, biome, or river defaults may differ.";
+            return out;
+        }
+        return out;
+    }
+    if(activeLegacy&&(hasModern32||hasModern25||cheese015)){
+        out.mismatch=true;
+        out.detectedVersion=(hasModern32||cheese015)?"1.0.0027-1.0.0032":"1.0.0025+";
+        out.summary="This preset contains "+out.detectedVersion+" settings (such as snowCoversSmallPlants, climate.erosion, tectonic bridge/warp handles, or cheeseCaveDepthOffset 0.15), while the active session is FTF "+activeVersion+".";
+        return out;
+    }
+    if(activeLatest&&(cheeseLegacy||(!hasModern32&&!hasModern25&&!cheese015))){
+        out.mismatch=true;
+        out.detectedVersion=(!hasModern25&&cheeseLegacy)?"1.0.0010-1.0.0022":(!hasModern25?"1.0.0010-1.0.0026":"1.0.0025-1.0.0026");
+        out.summary="This preset appears to be from an older FTF version ("+out.detectedVersion+": "+(cheeseLegacy?"cheeseCaveDepthOffset=1.5625, ":"")+"missing 1.0.0025+/1.0.0032 fields), while the active session is FTF 1.0.0032.";
+        return out;
+    }
+    return out;
 }
 void PresetDocument::exportTo(const std::filesystem::path& path)const{
     if(!loaded())throw std::runtime_error("Import an FTF preset first");finiteNumbers(data);
@@ -136,6 +200,25 @@ bool randomiseSeedButton(int64_t& value,bool worldSeed){
     std::uniform_int_distribution<int64_t> distribution(worldSeed?std::numeric_limits<int64_t>::min():std::numeric_limits<int32_t>::min(),worldSeed?std::numeric_limits<int64_t>::max():std::numeric_limits<int32_t>::max());
     int64_t next;do{next=distribution(generator);}while(next==value);value=next;return true;
 }
+bool copySeedButton(int64_t value){
+    static double copiedUntil=-1.0;
+    static ImGuiID copiedId=0;
+    bool clicked=ImGui::Button("##copySeed",{28,24});
+    ImGuiID id=ImGui::GetItemID();
+    auto a=ImGui::GetItemRectMin();auto* draw=ImGui::GetWindowDrawList();auto ink=ImGui::GetColorU32(ImGuiCol_Text);
+    ImVec2 c{a.x+14,a.y+12};
+    draw->AddRect({c.x-6,c.y-4},{c.x+3,c.y+7},ink,1.5f,0,1.4f);
+    const ImVec2 copyPts[4]={{c.x-2,c.y-4},{c.x-2,c.y-7},{c.x+6,c.y-7},{c.x+6,c.y+4}};
+    draw->AddPolyline(copyPts,4,ink,ImDrawFlags_None,1.4f);
+    draw->AddLine({c.x+3,c.y+4},{c.x+6,c.y+4},ink,1.4f);
+    if(clicked){
+        ImGui::SetClipboardText(std::to_string(value).c_str());
+        copiedId=id;
+        copiedUntil=ImGui::GetTime()+1.5;
+    }
+    if(ImGui::IsItemHovered())ImGui::SetTooltip((copiedId==id&&ImGui::GetTime()<copiedUntil)?"Copied!":"Copy seed");
+    return clicked;
+}
 bool numberControl(const char* label,float& value,float low,float high,const char* format){   // the shared value control; typed values may leave the slider range
     bool changed=valueSlider(label,value,low,high,format,0,false);
     if(ImGui::IsItemHovered())ImGui::SetTooltip("Click the number to type a value. Suggested slider range: %g to %g",low,high);
@@ -147,7 +230,7 @@ void PresetEditor::initialize(const std::filesystem::path& appRoot,GLFWwindow* n
     if(native&&!std::filesystem::exists(root/"library"))try{
         PresetDocument bundled;bundled.load(root/"presets"/"GPU World Gen.json");
         auto source=Datapack::read(root/"assets"/"ftf-datapack-template.zip");if(source.original==bundled.data)bundled.datapack=std::move(source);
-        PresetLibrary(root/"library").save(bundled,bundled.worldSeed.value_or(12345),"GPU World Gen");
+        PresetLibrary(root/"library").save(bundled,bundled.worldSeed.value_or(12345),"GPU World Gen",{},"1.0.0010");
     }catch(const std::exception& e){status="Initial library preset could not be added: "+std::string(e.what());}
 }
 std::filesystem::path PresetEditor::choose(bool saving,bool pack)const{
@@ -163,20 +246,20 @@ bool PresetEditor::toolbar(int64_t& seed,bool compact){
     if(ImGui::Button("Preset library...")){managerOpen=true;if(!libraryName[0])strncpy_s(libraryName,document.name.c_str(),_TRUNCATE);}
     if(compact){bool loaded=libraryWindow(seed);if(document.loaded())ImGui::TextWrapped("Preset: %s",document.name.c_str());if(!status.empty())ImGui::TextWrapped("%s",status.c_str());return loaded;}
     ImGui::SameLine();
-    if(ImGui::Button("Import JSON or datapack...")){try{auto path=choose(false);if(!path.empty()){document.load(path);past.clear();future.clear();if(document.worldSeed)seed=*document.worldSeed;changed=true;status="Imported "+path.filename().string();}}catch(const std::exception& e){status=e.what();}}
+    if(ImGui::Button("Import JSON or datapack...")){try{auto path=choose(false);if(!path.empty()){document.load(path);past.clear();future.clear();if(document.worldSeed)seed=*document.worldSeed;changed=true;refreshVersionWarning();if(versionWarning.mismatch)versionMismatchPopupPending=true;status="Imported "+path.filename().string();}}catch(const std::exception& e){status=e.what();}}
     if(ImGui::Button("Import datapack folder...")){
         HRESULT init=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);IFileOpenDialog* picker=nullptr;
         if(SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&picker)))){
             picker->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_NOCHANGEDIR);
             if(SUCCEEDED(picker->Show(glfwGetWin32Window(window)))){IShellItem* item=nullptr;if(SUCCEEDED(picker->GetResult(&item))){PWSTR name=nullptr;if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&name))){
-                try{document.load(std::filesystem::path(name));past.clear();future.clear();if(document.worldSeed)seed=*document.worldSeed;changed=true;status="Imported datapack folder";}catch(const std::exception& e){status=e.what();}CoTaskMemFree(name);
+                try{document.load(std::filesystem::path(name));past.clear();future.clear();if(document.worldSeed)seed=*document.worldSeed;changed=true;refreshVersionWarning();if(versionWarning.mismatch)versionMismatchPopupPending=true;status="Imported datapack folder";}catch(const std::exception& e){status=e.what();}CoTaskMemFree(name);
             }item->Release();}}picker->Release();
         }else status="Cannot open folder picker";if(SUCCEEDED(init))CoUninitialize();
     }
     ImGui::SameLine();ImGui::BeginDisabled(!document.loaded());
     if(ImGui::Button("Export preset...")){try{auto path=choose(true);if(!path.empty()){document.exportTo(path);document.markSaved();status="Exported "+path.string();}}catch(const std::exception& e){status=e.what();}}ImGui::EndDisabled();
     ImGui::BeginDisabled(!document.loaded());
-    if(ImGui::Button("Export FTF datapack...")){try{auto path=choose(true,true);if(!path.empty()){document.worldSeed=seed;document.exportDatapack(path,root/"assets"/"ftf-datapack-template.zip");status="Exported Minecraft 1.21.1 datapack: "+path.string();}}catch(const std::exception& e){status=e.what();}}ImGui::EndDisabled();
+    if(ImGui::Button("Export FTF datapack...")){try{auto path=choose(true,true);if(!path.empty()){document.worldSeed=seed;document.exportDatapack(path,root/"assets"/"ftf-datapack-template.zip",activeFtfVersion);status="Exported Minecraft 1.21.1 datapack: "+path.string();}}catch(const std::exception& e){status=e.what();}}ImGui::EndDisabled();
     changed|=libraryWindow(seed);
     if(document.loaded()){ImGui::TextWrapped("Preset: %s",document.name.c_str());ImGui::TextDisabled("Click any number to type beyond its slider range.");}
     ImGui::TextDisabled("Erosion: FTF 22-Oct Phacelle + cliff relaxation");
@@ -194,6 +277,7 @@ std::pair<double,double> PresetEditor::range(const std::string& path,const Prese
     auto key=path.substr(path.find_last_of('/')+1);
     if(key=="seedOffset"||key=="terrainSeedOffset"||key=="spawnX"||key=="spawnZ")return {-2147483648.0,2147483647.0};
     if(key=="baseScale")return {0,2};if(key=="weight"||key=="verticalScale")return {0,10};if(key=="horizontalScale")return {.01,10};
+    if(key=="bankWidth")return {1,200};
     if(key.find("Size")!=std::string::npos||key.find("Scale")!=std::string::npos||key.find("Width")!=std::string::npos)return {1,1000};
     if(key=="scale"||key=="falloff"||key=="octaves"||key=="riverCount")return {1,10};
     if(value.is_number_integer())return {0,256};return {0,1};
@@ -201,8 +285,9 @@ std::pair<double,double> PresetEditor::range(const std::string& path,const Prese
 PreviewBinding PresetEditor::bindingFor(const std::string& path,const TerrainParams& params)const{
     auto result=::previewBinding(path,params);
     if(path.starts_with("/world/continent/")){
-        auto type=document.data.value("world",PresetJson::object()).value("continent",PresetJson::object()).value("continentType",std::string("UPLIFT"));bool simple=type=="MULTI"||type=="SINGLE";
-        auto key=path.substr(path.find_last_of('/')+1);bool ignored=key=="continentShape"?!simple:simple&&(key=="continentSkipping"||key=="continentSizeVariance"||key.starts_with("continentNoise"));
+        auto type=document.data.value("world",PresetJson::object()).value("continent",PresetJson::object()).value("continentType",std::string("UPLIFT"));bool simple=type=="MULTI"||type=="SINGLE",uplift=type=="UPLIFT";
+        auto key=path.substr(path.find_last_of('/')+1);bool upliftOnly=key=="bridgeChance"||key=="tectonicPlateUplift"||key=="tectonicRounding"||key=="macroWarpStrength"||key=="coastalComplexity";
+        bool ignored=key=="continentShape"?!simple:(simple&&(key=="continentSkipping"||key=="continentSizeVariance"||key.starts_with("continentNoise")))||(!uplift&&upliftOnly);
         if(ignored){result.effect=PreviewEffect::SavedOnly;result.explanation="The selected "+type+" generator ignores this setting in FTF. Preserved for other continent types.";}
     }return result;
 }
@@ -263,7 +348,7 @@ bool PresetEditor::node(PresetJson& value,const std::string& path,const std::str
         }
         ImGui::SameLine(0,6);if(family<0)ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x-24);resetControl(path);
         if(opened){
-            auto visible=value;if(path=="/world/continent"&&!visible.contains("continentNoiseOctaves"))visible["continentNoiseOctaves"]=5;
+            auto visible=value;if(path=="/world/continent"){if(!visible.contains("continentNoiseOctaves"))visible["continentNoiseOctaves"]=5;for(const char* key:continentOptionalFields)if(!visible.contains(key))visible[key]=*optionalPresetDefault(path+"/"+key);}
             if((path=="/climate/temperature"||path=="/climate/moisture")&&!visible.contains("distributionBias"))visible["distributionBias"]=0.0;
             if(path=="/world/properties"&&!visible.contains("worldDepth"))visible["worldDepth"]=64;
             if(path=="/erosionFilters")for(const char* key:erosionOptionalFields)if(!visible.contains(key))visible[key]=*optionalPresetDefault(path+"/"+key);
@@ -340,6 +425,7 @@ bool PresetEditor::properties(TerrainParams& params){
             }
             auto visible=document.data[key];
             if(std::strcmp(key,"climate")==0&&!visible.contains("coastalMoistureBoost"))visible["coastalMoistureBoost"]=.2;
+            if(std::strcmp(key,"miscellaneous")==0&&!visible.contains("snowCoversSmallPlants"))visible["snowCoversSmallPlants"]=true;
             if(std::strcmp(key,"erosionFilters")==0)for(const char* field:erosionOptionalFields)if(!visible.contains(field))visible[field]=*optionalPresetDefault("/erosionFilters/"+std::string(field));
             if(std::strcmp(key,"island")==0)for(const char* field:islandOptionalFields)if(!visible.contains(field))visible[field]=*optionalPresetDefault("/island/"+std::string(field));
             for(auto& child:keys(visible,"/"+std::string(key))){
@@ -358,18 +444,18 @@ bool PresetEditor::properties(TerrainParams& params){
 bool PresetEditor::undo(){if(past.empty())return false;future.push_back(document.data);auto diff=PresetJson::diff(document.data,past.back());document.data=past.back();past.pop_back();if(!diff.empty())lastEditedPath=diff[0].value("path","");return true;}
 bool PresetEditor::redo(){if(future.empty())return false;past.push_back(document.data);auto diff=PresetJson::diff(document.data,future.back());document.data=future.back();future.pop_back();if(!diff.empty())lastEditedPath=diff[0].value("path","");return true;}
 
-void PresetEditor::loadDocument(const std::filesystem::path& path,int64_t& seed){document.load(path);clearHistory();if(document.worldSeed)seed=*document.worldSeed;}
+void PresetEditor::loadDocument(const std::filesystem::path& path,int64_t& seed){document.load(path);clearHistory();if(document.worldSeed)seed=*document.worldSeed;refreshVersionWarning();if(versionWarning.mismatch)versionMismatchPopupPending=true;}
 bool PresetEditor::importFolder(int64_t& seed){bool changed=false;
         HRESULT init=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);IFileOpenDialog* picker=nullptr;
         if(SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&picker)))){
             picker->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_NOCHANGEDIR);
             if(SUCCEEDED(picker->Show(glfwGetWin32Window(window)))){IShellItem* item=nullptr;if(SUCCEEDED(picker->GetResult(&item))){PWSTR name=nullptr;if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&name))){
-                try{document.load(std::filesystem::path(name));past.clear();future.clear();if(document.worldSeed)seed=*document.worldSeed;changed=true;status="Imported datapack folder";}catch(const std::exception& e){status=e.what();}CoTaskMemFree(name);
+                try{document.load(std::filesystem::path(name));past.clear();future.clear();if(document.worldSeed)seed=*document.worldSeed;changed=true;refreshVersionWarning();if(versionWarning.mismatch)versionMismatchPopupPending=true;status="Imported datapack folder";}catch(const std::exception& e){status=e.what();}CoTaskMemFree(name);
             }item->Release();}}picker->Release();
         }else status="Cannot open folder picker";if(SUCCEEDED(init))CoUninitialize();
 return changed;
 }
-void PresetEditor::exportAction(bool pack,int64_t seed){try{auto path=choose(true,pack);if(!path.empty()){document.worldSeed=seed;if(pack)document.exportDatapack(path,root/"assets"/"ftf-datapack-template.zip");else document.exportTo(path);document.markSaved();status="Exported "+path.string();}}catch(const std::exception& e){status=e.what();}}
+void PresetEditor::exportAction(bool pack,int64_t seed){try{auto path=choose(true,pack);if(!path.empty()){document.worldSeed=seed;if(pack)document.exportDatapack(path,root/"assets"/"ftf-datapack-template.zip",activeFtfVersion);else document.exportTo(path);document.markSaved();status="Exported "+path.string();}}catch(const std::exception& e){status=e.what();}}
 
 glm::vec2 PresetDocument::spawn()const{auto coord=[&](const char* name){auto p=PresetJson::json_pointer(std::string("/world/properties/")+name);return data.contains(p)&&data[p].is_number()?data[p].get<float>():0.0f;};return {coord("spawnX"),coord("spawnZ")};}
 

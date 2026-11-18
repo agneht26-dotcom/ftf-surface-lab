@@ -1,0 +1,13 @@
+{
+  "where": {
+    "biomes": ["minecraft:badlands", "minecraft:eroded_badlands", "minecraft:wooded_badlands"],
+    "tags": ["c:is_badlands"]
+  },
+  "rapids": ["minecraft:red_sand*3", "minecraft:red_sandstone*2", "minecraft:terracotta", "minecraft:gravel"],
+  "silt": ["minecraft:red_sand*4", "minecraft:terracotta"],
+  "shore": ["minecraft:red_sand*3", "keep*2", "minecraft:terracotta"],
+  "bars": ["minecraft:red_sand*3", "minecraft:gravel"],
+  "flats": ["minecraft:red_sand*2", "keep"],
+  "patch_size": 6,
+  "shore_height": 1
+}

@@ -13,23 +13,39 @@ PresetJson readMeta(const std::filesystem::path& p){std::ifstream in(p);PresetJs
 void writeMeta(const std::filesystem::path& path,const PresetJson& j){auto temp=path;temp+=L".tmp";std::ofstream out(temp,std::ios::binary);out<<j.dump(2)<<'\n';out.close();if(!out||!MoveFileExW(temp.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))throw std::runtime_error("Cannot save library metadata");}
 void validateEntry(const std::filesystem::path& root,const LibraryEntry& e){if(e.path.parent_path().parent_path()!=root||e.path.filename()!="preset.json"||e.id!=e.path.parent_path().filename().string())throw std::runtime_error("Invalid library entry");}
 }
-std::vector<LibraryEntry> PresetLibrary::list()const{
+std::vector<LibraryEntry> PresetLibrary::list(const std::string& builtinVersion,bool includeAllBuiltinVersions)const{
     std::vector<LibraryEntry> result;
     auto builtinRoot=root.parent_path()/"assets"/"ftf-presets",manifest=builtinRoot/"manifest.json";
     PresetJson builtins=PresetJson::object();if(std::filesystem::exists(manifest))builtins=readMeta(manifest);
-    if(builtins.contains("templates"))for(auto& item:builtins.at("templates")){
-        auto file=std::filesystem::path(item.at("file").get<std::string>());if(file!=file.filename())continue;
-        if(std::filesystem::is_regular_file(builtinRoot/file))result.push_back({"builtin-"+item.at("id").get<std::string>(),"FTF - "+item.at("name").get<std::string>(),builtinRoot/file,false,true});
+    std::string resolvedVer=builtinVersion.empty()?"1.0.0032":builtinVersion;
+    auto appendVersionBuiltins=[&](const std::string& ver,bool versionedId){
+        const PresetJson* tmpls=nullptr;
+        if(builtins.contains("versions")&&builtins["versions"].contains(ver)&&builtins["versions"][ver].contains("templates"))tmpls=&builtins["versions"][ver]["templates"];
+        else if(!versionedId&&builtins.contains("templates"))tmpls=&builtins.at("templates");
+        if(!tmpls)return;
+        for(auto& item:*tmpls){
+            auto file=std::filesystem::path(item.at("file").get<std::string>());
+            if(std::filesystem::is_regular_file(builtinRoot/file)){
+                std::string entryId=versionedId?("builtin-"+ver+"-"+item.at("id").get<std::string>()):("builtin-"+item.at("id").get<std::string>());
+                result.push_back({std::move(entryId),"FTF - "+item.at("name").get<std::string>(),builtinRoot/file,false,true,false,ver});
+            }
+        }
+    };
+    if(includeAllBuiltinVersions){
+        appendVersionBuiltins(resolvedVer,true);
+        for(const char* ver:ftfPresetVersionOrder())if(resolvedVer!=ver)appendVersionBuiltins(ver,true);
+    }else{
+        appendVersionBuiltins(resolvedVer,false);
     }
     if(std::filesystem::exists(root))
     for(auto& dir:std::filesystem::directory_iterator(root))if(dir.is_directory()&&!dir.is_symlink()&&dir.path().filename()!="trash"&&dir.path().filename().string().size()==36){
         auto meta=dir.path()/"preset.metadata.json",preset=dir.path()/"preset.json";
         if(!std::filesystem::exists(meta)||!std::filesystem::exists(preset))continue;
-        try{auto j=readMeta(meta);result.push_back({dir.path().filename().string(),j.at("name"),preset,j.value("favorite",false),false,j.value("custom_default",false)});}catch(...){/* An incomplete save is not a selectable preset. */}
+        try{auto j=readMeta(meta);result.push_back({dir.path().filename().string(),j.at("name"),preset,j.value("favorite",false),false,j.value("custom_default",false),j.value("ftf_version",std::string{})});}catch(...){/* An incomplete save is not a selectable preset. */}
     }
     std::stable_sort(result.begin(),result.end(),[](auto& a,auto& b){if(a.favorite!=b.favorite)return a.favorite>b.favorite;if(a.builtin!=b.builtin)return a.builtin>b.builtin;return a.builtin?false:a.name<b.name;});return result;
 }
-LibraryEntry PresetLibrary::save(const PresetDocument& doc,int64_t seed,const std::string& name,const std::string& id)const{
+LibraryEntry PresetLibrary::save(const PresetDocument& doc,int64_t seed,const std::string& name,const std::string& id,const std::string& ftfVersion)const{
     if(!doc.loaded())throw std::runtime_error("Import a preset first");validName(name);
     std::string key=id.empty()?newId():id;
     if(key.find_first_not_of("0123456789abcdefABCDEF-")!=std::string::npos||key.size()!=36)throw std::runtime_error("Invalid library ID");
@@ -37,11 +53,13 @@ LibraryEntry PresetLibrary::save(const PresetDocument& doc,int64_t seed,const st
     if(std::filesystem::exists(path/"preset.metadata.json")){auto metadata=readMeta(path/"preset.metadata.json");if(metadata.value("custom_default",false))throw std::runtime_error("Custom Defaults are templates. Save a new preset with a new name.");fav=metadata.value("favorite",false);}
     auto pending=root/(".pending-"+newId());std::filesystem::create_directory(pending);
     if(doc.datapack)doc.datapack->write(pending/"source.zip");
-    doc.exportTo(pending/"preset.json");PresetJson metadata={{"name",name},{"world_seed",seed},{"favorite",fav},{"format",1}};if(doc.previewExtent)metadata["preview_extent"]=*doc.previewExtent;writeMeta(pending/"preset.metadata.json",metadata);
+    doc.exportTo(pending/"preset.json");PresetJson metadata={{"name",name},{"world_seed",seed},{"favorite",fav},{"format",1}};if(doc.previewExtent)metadata["preview_extent"]=*doc.previewExtent;
+    std::string tagVer=!ftfVersion.empty()?ftfVersion:doc.sourceFtfVersion.value_or(std::string{});if(!tagVer.empty())metadata["ftf_version"]=tagVer;
+    writeMeta(pending/"preset.metadata.json",metadata);
     std::filesystem::path backup;
     if(std::filesystem::exists(path)){auto history=root/"history";std::filesystem::create_directories(history);backup=history/(key+"-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count()));std::filesystem::rename(path,backup);}
     try{std::filesystem::rename(pending,path);}catch(...){if(!backup.empty())std::filesystem::rename(backup,path);throw;}
-    doc.markSaved();return {key,name,path/"preset.json",fav};
+    doc.markSaved();return {key,name,path/"preset.json",fav,false,false,tagVer};
 }
 void PresetLibrary::rename(const LibraryEntry& e,const std::string& name)const{validateEntry(root,e);validName(name);auto p=e.path.parent_path()/"preset.metadata.json";auto j=readMeta(p);j["name"]=name;writeMeta(p,j);}
 void PresetLibrary::promote(const LibraryEntry& e,bool enabled)const{validateEntry(root,e);auto p=e.path.parent_path()/"preset.metadata.json";auto j=readMeta(p);j["custom_default"]=enabled;writeMeta(p,j);}
@@ -61,31 +79,56 @@ bool PresetEditor::libraryWindow(int64_t& seed){
     bool changed=false;if(!managerOpen)return false;
     if(!ImGui::IsPopupOpen("Preset library"))ImGui::OpenPopup("Preset library");
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),ImGuiCond_Appearing,ImVec2(.5f,.5f));
-    ImGui::SetNextWindowSize(ImVec2(660,570),ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(700,620),ImGuiCond_FirstUseEver);
     if(ImGui::BeginPopupModal("Preset library",&managerOpen)){
         try{
-            PresetLibrary library(root/"library");auto entries=library.list();
-            ImGui::InputText(labelAbove("Search").c_str(),librarySearch,sizeof(librarySearch));
-            ImGui::BeginChild("Library entries",ImVec2(0,200),true);
-            for(int section=0;section<3;++section){
-                const char* title=section==0?"Default":section==1?"Custom":"Custom Defaults";
-                if(!ImGui::CollapsingHeader(title,section==0||uiSectionsStartCollapsed?ImGuiTreeNodeFlags_None:ImGuiTreeNodeFlags_DefaultOpen))continue;
+            const std::string activeVer=activeFtfVersion.empty()?std::string("1.0.0032"):activeFtfVersion;
+            PresetLibrary library(root/"library");auto entries=library.list(activeVer,true);
+            ImGui::InputText(labelAbove("Search (name or FTF version)").c_str(),librarySearch,sizeof(librarySearch));
+            auto lower=[](std::string s){std::transform(s.begin(),s.end(),s.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});return s;};
+            const std::string needle=lower(librarySearch);
+            auto renderSection=[&](const std::string& header,bool defaultOpen,auto&& pred){
+                ImGuiTreeNodeFlags flags=(defaultOpen&&!uiSectionsStartCollapsed)?ImGuiTreeNodeFlags_DefaultOpen:ImGuiTreeNodeFlags_None;
+                if(!ImGui::CollapsingHeader(header.c_str(),flags))return;
                 bool any=false;
-                for(auto& e:entries){if((e.builtin?0:e.customDefault?2:1)!=section)continue;
-                    std::string label=(e.favorite?"* ":"")+e.name;
-                    std::string hay=label,needle=librarySearch;auto lower=[](unsigned char c){return static_cast<char>(std::tolower(c));};std::transform(hay.begin(),hay.end(),hay.begin(),lower);std::transform(needle.begin(),needle.end(),needle.begin(),lower);
-                    if(hay.find(needle)==std::string::npos)continue;any=true;
+                for(const auto& e:entries){
+                    if(!pred(e))continue;
+                    std::string label=libraryDisplayLabel(e);
+                    if(!needle.empty()&&lower(label).find(needle)==std::string::npos)continue;
+                    any=true;
+                    const bool crossVer=!e.ftfVersion.empty()&&e.ftfVersion!=activeVer;
+                    if(crossVer)ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0.96f,0.78f,0.38f,1.0f));
                     if(ImGui::Selectable((label+"##"+e.id).c_str(),librarySelection==e.id)){librarySelection=e.id;strncpy_s(libraryName,e.name.c_str(),_TRUNCATE);}
+                    if(crossVer)ImGui::PopStyleColor();
                 }
                 if(!any)ImGui::TextDisabled("No presets");
-            }ImGui::EndChild();
+            };
+            std::vector<std::string> versionOrder{activeVer};
+            for(const char* ver:ftfPresetVersionOrder())if(activeVer!=ver)versionOrder.emplace_back(ver);
+            ImGui::BeginChild("Library entries",ImVec2(0,220),true);
+            for(const auto& ver:versionOrder){
+                std::string title="Default - FTF "+ver+(ver==activeVer?" (Active)":"");
+                renderSection(title,false,[&](const LibraryEntry& e){return e.builtin&&e.ftfVersion==ver;});
+            }
+            renderSection("Custom Defaults",true,[](const LibraryEntry& e){return !e.builtin&&e.customDefault;});
+            renderSection("Custom",true,[](const LibraryEntry& e){return !e.builtin&&!e.customDefault;});
+            ImGui::EndChild();
             auto selected=std::find_if(entries.begin(),entries.end(),[&](auto& e){return e.id==librarySelection;});
+            if(selected!=entries.end()){
+                const char* category=selected->builtin?"Default template":selected->customDefault?"Custom Default template":"Custom preset";
+                std::string madeFor=selected->ftfVersion.empty()?"Unknown (legacy / untagged)":("FTF "+selected->ftfVersion);
+                ImGui::TextDisabled("Made for: %s  |  Type: %s",madeFor.c_str(),category);
+                if(!selected->ftfVersion.empty()&&selected->ftfVersion!=activeVer)
+                    ImGui::TextColored(ImVec4(0.96f,0.72f,0.22f,1.0f),"Warning: Made for FTF %s, active session is locked to FTF %s (restart to switch FTF version).",selected->ftfVersion.c_str(),activeVer.c_str());
+                else if(selected->ftfVersion.empty())
+                    ImGui::TextColored(ImVec4(0.96f,0.72f,0.22f,1.0f),"Note: Older preset with no recorded FTF version tag (active session: %s).",activeVer.c_str());
+            }
             ImGui::InputText(labelAbove("Name",320).c_str(),libraryName,sizeof(libraryName));
             ImGui::BeginDisabled(!document.loaded());
             if(ImGui::Button("Save current as new")){
                 auto source=std::find_if(entries.begin(),entries.end(),[&](auto& e){return e.path==document.source&&(e.builtin||e.customDefault);});
                 if(source!=entries.end()){libraryTemplateName=source->name;strncpy_s(libraryName,(source->name+" copy").c_str(),_TRUNCATE);ImGui::OpenPopup("Save new preset name");}
-                else{auto e=library.save(document,seed,libraryName);librarySelection=e.id;savedLibraryData=document.data;savedLibrarySeed=seed;status="Saved new library preset: "+e.name;}
+                else{auto e=library.save(document,seed,libraryName,{},activeVer);librarySelection=e.id;savedLibraryData=document.data;savedLibrarySeed=seed;status="Saved new library preset: "+e.name;}
             }
             ImGui::EndDisabled();
             ImGui::BeginDisabled(selected==entries.end());
@@ -96,7 +139,7 @@ bool PresetEditor::libraryWindow(int64_t& seed){
             }
             ImGui::BeginDisabled(selected!=entries.end()&&(selected->builtin||selected->customDefault));
             if(ImGui::Button("Rename")){library.rename(*selected,libraryName);status="Renamed library preset";}
-            ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Duplicate")){PresetDocument copy;copy.load(selected->path);auto e=library.save(copy,copy.worldSeed.value_or(seed),selected->name+" copy");librarySelection=e.id;strncpy_s(libraryName,e.name.c_str(),_TRUNCATE);status="Duplicated library preset";}
+            ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Duplicate")){PresetDocument copy;copy.load(selected->path);auto e=library.save(copy,copy.worldSeed.value_or(seed),selected->name+" copy",{},selected->ftfVersion);librarySelection=e.id;strncpy_s(libraryName,e.name.c_str(),_TRUNCATE);status="Duplicated library preset";}
             ImGui::SameLine();ImGui::BeginDisabled(selected!=entries.end()&&selected->builtin);if(ImGui::Button(selected!=entries.end()&&selected->favorite?"Unfavorite":"Favorite"))library.favorite(*selected,!selected->favorite);
             ImGui::SameLine();if(ImGui::Button("Delete"))ImGui::OpenPopup("Delete library preset?");
             ImGui::EndDisabled();ImGui::EndDisabled();
@@ -110,21 +153,23 @@ bool PresetEditor::libraryWindow(int64_t& seed){
                 bool unique=!normalized(name).empty()&&normalized(name)!=normalized(libraryTemplateName)&&std::none_of(entries.begin(),entries.end(),[&](auto& e){return normalized(e.name)==normalized(name);});
                 if(!unique)ImGui::TextDisabled("Choose a different, unused name.");
                 ImGui::BeginDisabled(!unique);
-                if(ImGui::Button("Save new preset")){auto e=library.save(document,seed,name);librarySelection=e.id;savedLibraryData=document.data;savedLibrarySeed=seed;status="Saved new Custom preset: "+e.name;ImGui::CloseCurrentPopup();}
+                if(ImGui::Button("Save new preset")){auto e=library.save(document,seed,name,{},activeVer);librarySelection=e.id;savedLibraryData=document.data;savedLibrarySeed=seed;status="Saved new Custom preset: "+e.name;ImGui::CloseCurrentPopup();}
                 ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
             }
             if(ImGui::Button("Restore last deleted")){library.restoreLast();status="Restored library preset";}
             for(auto action:{"Load library preset?","Overwrite library preset?","Delete library preset?"})if(ImGui::BeginPopupModal(action,nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
                 ImGui::TextUnformatted(std::string(action).starts_with("Load")?"Replace the current preview settings? Save current as new first to keep edits.":std::string(action).starts_with("Overwrite")?"Replace the selected library preset with current settings and seed?":"Move the selected preset to library/trash? It can be restored.");
+                if(std::string(action).starts_with("Load")&&selected!=entries.end()&&!selected->ftfVersion.empty()&&selected->ftfVersion!=activeVer)
+                    ImGui::TextColored(ImVec4(0.96f,0.72f,0.22f,1.0f),"Note: Made for FTF %s, active session is FTF %s (restart to switch FTF version).",selected->ftfVersion.c_str(),activeVer.c_str());
                 if(ImGui::Button("Confirm")&&selected!=entries.end()){
-                    if(std::string(action).starts_with("Load")){document.load(selected->path);if(document.worldSeed)seed=*document.worldSeed;clearHistory();savedLibraryData=document.data;savedLibrarySeed=seed;changed=true;status="Loaded "+selected->name;}
-                    else if(std::string(action).starts_with("Overwrite")){library.save(document,seed,libraryName,selected->id);savedLibraryData=document.data;savedLibrarySeed=seed;status="Updated library preset";}
+                    if(std::string(action).starts_with("Load")){document.load(selected->path);if(selected->ftfVersion.size())document.sourceFtfVersion=selected->ftfVersion;if(document.worldSeed)seed=*document.worldSeed;clearHistory();savedLibraryData=document.data;savedLibrarySeed=seed;changed=true;refreshVersionWarning();if(versionWarning.mismatch)versionMismatchPopupPending=true;status="Loaded "+selected->name;}
+                    else if(std::string(action).starts_with("Overwrite")){library.save(document,seed,libraryName,selected->id,activeVer);savedLibraryData=document.data;savedLibrarySeed=seed;status="Updated library preset";}
                     else{library.trash(*selected);librarySelection.clear();status="Deleted preset; Restore last deleted is available";}
                     ImGui::CloseCurrentPopup();
                 }ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
             }
             if(!savedLibraryData.is_null()&&(document.data!=savedLibraryData||savedLibrarySeed!=seed))ImGui::TextWrapped("Current settings or seed differ from the last library save/load.");
-            ImGui::TextWrapped("Default and Custom Defaults are templates: saving creates a Custom preset with a new name. Promote a Custom preset to keep it as your own reusable default. Your library entries include the preset, preview seed and original datapack when available.");
+            ImGui::TextWrapped("Default and Custom Defaults are templates: saving creates a Custom preset with a new name. Promote a Custom preset to keep it as your own reusable default. Presets show which FTF version they were made for.");
         }catch(const std::exception& e){status=e.what();}
         if(!status.empty())ImGui::TextWrapped("%s",status.c_str());
         ImGui::EndPopup();

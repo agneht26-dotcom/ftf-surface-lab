@@ -1,0 +1,13 @@
+{
+  "where": {
+    "biomes": ["minecraft:swamp"],
+    "tags": ["c:is_swamp"]
+  },
+  "rapids": ["minecraft:mud*3", "minecraft:clay", "minecraft:gravel"],
+  "silt": ["minecraft:mud*5", "minecraft:clay*2"],
+  "shore": ["minecraft:mud*4", "keep*3"],
+  "bars": ["minecraft:mud*2", "minecraft:clay", "minecraft:sand"],
+  "flats": ["minecraft:mud*4", "keep*3", "minecraft:clay"],
+  "patch_size": 6,
+  "shore_height": 2
+}

@@ -1,0 +1,12 @@
+{
+  "where": {
+    "climate": { "temperature": [0.5, 2.5], "downfall": [0.8, 1.0] }
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:mossy_cobblestone*2", "minecraft:cobblestone"],
+  "silt": ["minecraft:clay*3", "minecraft:sand*2", "minecraft:gravel"],
+  "shore": ["keep*4", "minecraft:rooted_dirt*3", "minecraft:mossy_cobblestone"],
+  "bars": ["minecraft:sand*3", "minecraft:clay"],
+  "flats": ["keep*3", "minecraft:rooted_dirt", "minecraft:sand"],
+  "patch_size": 5,
+  "shore_height": 1
+}

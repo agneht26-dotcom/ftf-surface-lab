@@ -1,0 +1,13 @@
+{
+  "where": {
+    "biomes": ["minecraft:lush_caves"],
+    "tags": ["c:is_lush"]
+  },
+  "rapids": ["minecraft:mossy_cobblestone*2", "minecraft:gravel", "minecraft:clay"],
+  "silt": ["minecraft:clay*3", "minecraft:moss_block"],
+  "shore": ["minecraft:moss_block*3", "minecraft:clay", "keep"],
+  "bars": ["minecraft:clay*2", "minecraft:gravel"],
+  "flats": ["minecraft:moss_block*2", "minecraft:clay"],
+  "patch_size": 5,
+  "shore_height": 1
+}

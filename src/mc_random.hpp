@@ -38,6 +38,7 @@ public:
     Xoroshiro(uint64_t l,uint64_t h):lo(l),hi(h){if((lo|hi)==0){lo=0x9E3779B97F4A7C15ull;hi=0x6A09E667F3BCC909ull;}}   // Xoroshiro128PlusPlus: an all-zero state is replaced
     static Xoroshiro fromSeed(int64_t seed){uint64_t l=uint64_t(seed)^0x6A09E667F3BCC909ull,h=l+0x9E3779B97F4A7C15ull;return {mixStafford13(l),mixStafford13(h)};}   // new XoroshiroRandomSource(long)
     uint64_t nextLong(){uint64_t l=lo,m=hi,n=std::rotl(l+m,17)+l;m^=l;lo=std::rotl(l,49)^m^(m<<21);hi=std::rotl(m,28);return n;}
+    bool nextBoolean(){return (nextLong()&1ull)!=0;}
     int32_t nextInt(){return int32_t(uint32_t(nextLong()));}
     int32_t nextInt(int32_t bound){   // XoroshiroRandomSource.nextInt(int): Lemire's method
         uint64_t l=uint32_t(nextInt()),m=l*uint64_t(bound),n=m&0xFFFFFFFFull;
@@ -59,7 +60,10 @@ public:
     uint64_t seed;
     explicit Legacy(int64_t s):seed((uint64_t(s)^0x5DEECE66Dull)&((1ull<<48)-1)){}
     int32_t next(int bits){seed=(seed*0x5DEECE66Dull+11ull)&((1ull<<48)-1);return int32_t(int64_t(seed)>>(48-bits));}
+    int32_t nextInt(){return next(32);}
     int32_t nextInt(int32_t bound){if((bound&(bound-1))==0)return int32_t((int64_t(bound)*int64_t(next(31)))>>31);int32_t i,j;do{i=next(31);j=i%bound;}while(int32_t(uint32_t(i)-uint32_t(j)+uint32_t(bound-1))<0);return j;}
+    int64_t nextLong(){int32_t hi=next(32),lo=next(32);return (int64_t(hi)<<32)+int64_t(lo);}
+    float nextFloat(){return float(next(24))*5.9604645E-8f;}
     double nextDouble(){int64_t i=next(26),j=next(27);return double((i<<27)+j)*1.1102230246251565E-16;}
 };
 // SimplexNoise(RandomSource): offsets, then a 256-entry permutation (the 2D getValue only reads the permutation).

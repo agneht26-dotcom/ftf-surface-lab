@@ -1,0 +1,13 @@
+{
+  "where": {
+    "biomes": ["minecraft:beach", "minecraft:snowy_beach"],
+    "tags": ["c:is_beach", "c:is_ocean"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:sand*2"],
+  "silt": ["minecraft:sand*5", "minecraft:gravel"],
+  "shore": ["minecraft:sand*3", "keep*2"],
+  "bars": ["minecraft:sand*4", "minecraft:gravel"],
+  "flats": ["minecraft:sand*3", "keep"],
+  "patch_size": 6,
+  "shore_height": 1
+}

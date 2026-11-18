@@ -1,0 +1,13 @@
+{
+  "where": {
+    "biomes": ["minecraft:river"],
+    "tags": ["c:is_river"]
+  },
+  "rapids": ["minecraft:gravel*5", "minecraft:cobblestone", "minecraft:mossy_cobblestone"],
+  "silt": ["minecraft:sand*4", "minecraft:clay*3", "minecraft:gravel*2"],
+  "shore": ["keep*7", "minecraft:sand", "minecraft:gravel"],
+  "bars": ["minecraft:sand*4", "minecraft:gravel"],
+  "flats": ["keep*3", "minecraft:sand*2", "minecraft:gravel"],
+  "patch_size": 5,
+  "shore_height": 1
+}

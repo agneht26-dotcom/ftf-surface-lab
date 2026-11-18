@@ -32,13 +32,13 @@ vec3 ftfIslands(vec2 p,vec3 base){
     precise float ca=cos(angle),sa=sin(angle),h=max(.1,graph.island1.y),mh=max(.1,graph.island2.w),vh=max(.1,graph.island2.z);
     precise float modulation=islandNoise(p*.005,4109u,islandScale(size*1.5),2),modFactor=.5+.5*modulation;
     precise vec2 angularPoint=vec2(ca*2.5+p.x*.008,sa*2.5+p.y*.008);
-    precise float angular=islandNoise(angularPoint,8821u,islandScale(size*.25*h),2),detail=islandNoise(p*.02,6317u,islandScale(size*.12*h),3);
+    precise float angular=islandNoise(angularPoint,8821u,islandScale(size*.25*h),2),detail=islandNoise(p*.02,6317u,islandScale(size*.12*h),graph.filterMeta2.x>=4u?2:3);
     precise float coastal=(angular*.65+detail*.35)*(.2+.8*modFactor),noiseFade=islandSmooth(0.0,.12,alpha);
     precise float perturbed=clamp(alpha+coastal*.18*(1.0-alpha*.8)*noiseFade,0.0,1.0),beachWidth=clamp(graph.island3.y,.05,.5),coverage=clamp(graph.island3.z,0.0,1.0);
     precise float widthMultiplier=3.0*sizeScale*depthScale*(.7+.6*modFactor),shelfEnd=clamp(beachWidth*.65*widthMultiplier,.12,.6);
     precise float variance=islandNoise(p,5541u,islandScale(size*.21*h),2)+coastal*.5,cliff=islandSmooth(-.2,.6,variance);
     precise float activeWidth=ftfLerp(beachWidth*widthMultiplier,.02,cliff),coastEnd=clamp(shelfEnd+activeWidth*.5,shelfEnd+.01,.85);
-    precise float beachEnd=coastEnd+activeWidth*coverage*1.5,bVariance=variance*.15*(1.0-cliff)-.05*(1.0-cliff),dynamicEnd=clamp(beachEnd+bVariance,coastEnd+.01,.9);
+    precise float beachEnd=coastEnd+activeWidth*coverage*1.5,bVariance=variance*.15*(1.0-cliff)-.05*(1.0-cliff),dynamicEnd=clamp(beachEnd+bVariance,graph.filterMeta2.x>=4u?shelfEnd+.02:coastEnd+.01,.9);
     precise float waterY=min(graph.worldLevels.z-1.0,factor),water=worldDiv(waterY,factor),ground=worldDiv(min(graph.worldLevels.z,factor),factor);
     precise float oceanFloor=worldDiv(waterY-depth,factor),clampedFloor=min(base.x,oceanFloor),floorAlpha=islandDensity(p)*islandSmooth(0.0,shelfEnd,perturbed);
     precise float floorHeight=ftfLerp(base.x,clampedFloor,floorAlpha);
@@ -50,7 +50,25 @@ vec3 ftfIslands(vec2 p,vec3 base){
     precise float onset=islandSmooth(0.0,shelfEnd*.3,perturbed),shoreWidth=shelfEnd*.2,shoreStart=max(0.0,shelfEnd-shoreWidth),shore=1.0-islandSmooth(shoreStart,shelfEnd,perturbed);
     precise float detailBlocks=ridge*ftfLerp(1.5,6.0,regionVariance)*(onset*shore),submerged=min(shelfHeight,water),headroom=max(0.0,(water-submerged)*factor);
     shelfHeight=submerged+worldDiv(min(max(0.0,detailBlocks),headroom),factor);
-    precise float coastAlpha=islandSmooth(shelfEnd,coastEnd,perturbed),beachHeight=ftfLerp(shelfHeight,ground,coastAlpha);
+    precise float coastAlpha=islandSmooth(shelfEnd,graph.filterMeta2.x>=4u?dynamicEnd:coastEnd,perturbed),beachHeight=ftfLerp(shelfHeight,ground,coastAlpha);
+    if(graph.filterMeta2.x>=4u){
+        precise float inlandAlpha=islandSmooth(dynamicEnd,1.0,perturbed),inlandBase=inlandAlpha*graph.island0.z*(.035+graph.island0.w*.1),mScale=clamp(graph.island1.w,0.0,1.0),mChance=clamp(graph.island1.z,0.0,1.0);
+        precise float domeShape=ftfLerp(inlandAlpha*.3,pow(inlandAlpha,ftfLerp(1.3,3.6,mScale)),inlandAlpha),domeContribution=domeShape*graph.island0.z*graph.island1.x*.95;
+        precise float summitInfluence=islandSmooth(.5,.95,inlandAlpha),summitStrength=.42*(.4+mScale*.8)*mChance;
+        precise float summit=islandNoise(p,5107u,islandScale(size*.4*mh*h),2)*summitInfluence*summitStrength;domeContribution+=summit*inlandAlpha*graph.island0.z*graph.island1.x;
+        precise float vScale=clamp(graph.island2.y,0.0,1.0),vChance=clamp(graph.island2.x,0.0,1.0),spire=ftfRidgeNode(p,graph.islandMeta.y+7213u,islandScale(size*.07*vh*h),3,2.2,.85);
+        precise float mask=.5+.5*islandNoise(p,3391u,islandScale(size*.35*vh*h),2),presence=islandSmooth(1.0-vChance,1.0,mask),location=islandSmooth(.2,.8,inlandAlpha);
+        precise float relief=pow(spire,2.8)*presence*location*vScale*graph.island0.z*graph.island1.x*.5,inlandRelief=inlandBase+(max(0.0,domeContribution)+relief),height=beachHeight+inlandRelief;
+        precise vec2 rq=islandWarp(p+vec2(31415.0,-27182.0),1492u,4000,2,2000.0);precise float mushroomRegion=clamp(islandNoise(rq,1492u,12000,2),0.0,1.0);
+        bool isMushroom=base.y<=coast&&mushroomRegion>.88;
+        precise float edge=perturbed<shelfEnd?ftfLerp(base.y,coast,islandSmooth(0.0,shelfEnd,perturbed)):ftfLerp(coast,graph.biomeOptions.w,islandSmooth(shelfEnd,1.0,perturbed));
+        float assignment=base.z;if(height<=water){if(perturbed>=.01)assignment=66.0;}
+        else if(isMushroom)assignment=71.0;
+        else if(perturbed<dynamicEnd)assignment=72.0;
+        else if(inlandAlpha>.4&&(graph.island1.z>.05||vScale>.2))assignment=70.0;
+        else assignment=68.0;
+        return vec3(height,edge,assignment);
+    }
     precise float landEnd=clamp(ftfLerp(1.0,dynamicEnd+.32,cliff),dynamicEnd+.05,1.0),landAlpha=islandSmooth(dynamicEnd,landEnd,perturbed);
     precise float inlandBase=landAlpha*graph.island0.z*(.035+graph.island0.w*.1),mScale=clamp(graph.island1.w,0.0,1.0),mChance=clamp(graph.island1.z,0.0,1.0);
     precise float dome=ftfLerp(shape*.4,pow(shape,ftfLerp(1.3,3.6,mScale)),shape),domeContribution=dome*graph.island0.z*graph.island1.x*.95;

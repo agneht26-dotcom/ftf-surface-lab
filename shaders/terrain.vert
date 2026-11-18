@@ -41,7 +41,7 @@ void main(){
     altitude=s.x-d.view.y;surfaceY=s.x;worldXZ=pos.xz+d.limits.zw;
     if(d.focus.w>0.0){
         pos.xz+=d.focus.xy;
-        vec2 uv=clamp((pos.xz-(detailHole.w>.5?d.focus.xy:vec2(0)))/d.focus.z+.5,vec2(0),vec2(1));
+        vec2 uv=clamp((pos.xz-(detailHole.w>.5?detailHole.xy:vec2(0)))/d.focus.z+.5,vec2(0),vec2(1));
         ivec2 nbase=imageSize(coarseField);vec2 f=uv*vec2(nbase-1);ivec2 a=ivec2(f);vec2 t=fract(f);ivec2 b=min(a+1,nbase-1);
         // Match the two triangles of the base mesh exactly at the transition.
         float h00=imageLoad(coarseField,a).x,h10=imageLoad(coarseField,ivec2(b.x,a.y)).x,h01=imageLoad(coarseField,ivec2(a.x,b.y)).x,h11=imageLoad(coarseField,b).x;

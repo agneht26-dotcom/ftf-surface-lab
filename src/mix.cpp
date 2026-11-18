@@ -36,7 +36,8 @@ void buildLandMix(const nlohmann::ordered_json& preset,int64_t worldSeed,GraphSe
     uint32_t regionSize=preset.at(nlohmann::ordered_json::json_pointer("/terrain/general/terrainRegionSize")).get<uint32_t>();
     if(regionSize<4||regionSize>2147483520u)throw std::runtime_error("Land mix paused: region size must be between 4 and the positive FTF integer limit");
     bool fancy=preset.at(nlohmann::ordered_json::json_pointer("/terrain/general/fancyMountains")).get<bool>();
-    bool legacy=preset.at(nlohmann::ordered_json::json_pointer("/terrain/general/legacyMountainScaling")).get<bool>();
+    auto legacyPtr=nlohmann::ordered_json::json_pointer("/terrain/general/legacyMountainScaling");
+    bool legacy=preset.contains(legacyPtr)?preset.at(legacyPtr).get<bool>():true;
     float variety=number("/terrain/general/mountainVariety",0);
     float mountainWeight=number("/terrain/mountains/weight",1);
     if(mountainWeight<0)throw std::runtime_error("Land mix paused: mountain weight must be non-negative");

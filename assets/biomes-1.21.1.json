@@ -1,8 +1,14 @@
 {
   "minecraft": "1.21.1",
-  "selection": "Official OverworldBiomeBuilder, excluding underground-only biomes; original Climate RTree topology; FTF river roles.",
-  "parameter_entries": 7593,
   "tree_nodes": 9120,
+  "vanilla_tree_nodes": 9120,
+  "packs": [
+    {
+      "id": "regions_unexplored",
+      "version": "0.6.3",
+      "biomes": 78
+    }
+  ],
   "biomes": [
     {
       "id": 0,
@@ -13,7 +19,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 2.0,
-      "downfall": 0.0
+      "downfall": 0.0,
+      "canonical_id": 0,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 1,
@@ -24,7 +33,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.95,
-      "downfall": 0.9
+      "downfall": 0.9,
+      "canonical_id": 1,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 2,
@@ -35,7 +47,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.8,
-      "downfall": 0.4
+      "downfall": 0.4,
+      "canonical_id": 2,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 3,
@@ -46,7 +61,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.6,
-      "downfall": 0.6
+      "downfall": 0.6,
+      "canonical_id": 3,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 4,
@@ -57,7 +75,10 @@
       "water": 6141935,
       "grass_modifier": "none",
       "temperature": 0.5,
-      "downfall": 0.8
+      "downfall": 0.8,
+      "canonical_id": 4,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 5,
@@ -68,7 +89,10 @@
       "water": 4020182,
       "grass_modifier": "none",
       "temperature": 0.5,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 5,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 6,
@@ -79,7 +103,10 @@
       "water": 4159204,
       "grass_modifier": "dark_forest",
       "temperature": 0.7,
-      "downfall": 0.8
+      "downfall": 0.8,
+      "canonical_id": 6,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 7,
@@ -90,7 +117,10 @@
       "water": 4020182,
       "grass_modifier": "none",
       "temperature": 0.5,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 7,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 8,
@@ -101,7 +131,10 @@
       "water": 3750089,
       "grass_modifier": "none",
       "temperature": 0.5,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 8,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 9,
@@ -112,7 +145,10 @@
       "water": 4566514,
       "grass_modifier": "none",
       "temperature": 0.5,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 9,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 10,
@@ -123,7 +159,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.5,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 10,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 11,
@@ -134,7 +173,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 2.0,
-      "downfall": 0.0
+      "downfall": 0.0,
+      "canonical_id": 11,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 12,
@@ -145,7 +187,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 2.0,
-      "downfall": 0.0
+      "downfall": 0.0,
+      "canonical_id": 12,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 13,
@@ -156,7 +201,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.7,
-      "downfall": 0.8
+      "downfall": 0.8,
+      "canonical_id": 13,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 14,
@@ -167,7 +215,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.7,
-      "downfall": 0.8
+      "downfall": 0.8,
+      "canonical_id": 14,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 15,
@@ -178,7 +229,10 @@
       "water": 3750089,
       "grass_modifier": "none",
       "temperature": 0.0,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 15,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 16,
@@ -189,7 +243,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": -0.7,
-      "downfall": 0.9
+      "downfall": 0.9,
+      "canonical_id": 16,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 17,
@@ -200,7 +257,10 @@
       "water": 3750089,
       "grass_modifier": "none",
       "temperature": 0.0,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 17,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 18,
@@ -211,7 +271,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": -0.2,
-      "downfall": 0.8
+      "downfall": 0.8,
+      "canonical_id": 18,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 19,
@@ -222,7 +285,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.0,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 19,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 20,
@@ -233,7 +299,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": -0.7,
-      "downfall": 0.9
+      "downfall": 0.9,
+      "canonical_id": 20,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 21,
@@ -244,7 +313,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.95,
-      "downfall": 0.9
+      "downfall": 0.9,
+      "canonical_id": 21,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 22,
@@ -255,7 +327,10 @@
       "water": 4566514,
       "grass_modifier": "none",
       "temperature": 0.5,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 22,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 23,
@@ -266,7 +341,10 @@
       "water": 3832426,
       "grass_modifier": "swamp",
       "temperature": 0.8,
-      "downfall": 0.9
+      "downfall": 0.9,
+      "canonical_id": 23,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 24,
@@ -277,7 +355,10 @@
       "water": 937679,
       "grass_modifier": "none",
       "temperature": 0.5,
-      "downfall": 0.8
+      "downfall": 0.8,
+      "canonical_id": 24,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 25,
@@ -288,7 +369,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.9,
-      "downfall": 1.0
+      "downfall": 1.0,
+      "canonical_id": 25,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 26,
@@ -299,7 +383,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.5,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 26,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 27,
@@ -310,7 +397,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.6,
-      "downfall": 0.6
+      "downfall": 0.6,
+      "canonical_id": 27,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 28,
@@ -321,7 +411,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.3,
-      "downfall": 0.8
+      "downfall": 0.8,
+      "canonical_id": 28,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 29,
@@ -332,7 +425,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.25,
-      "downfall": 0.8
+      "downfall": 0.8,
+      "canonical_id": 29,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 30,
@@ -343,7 +439,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.8,
-      "downfall": 0.4
+      "downfall": 0.4,
+      "canonical_id": 30,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 31,
@@ -354,7 +453,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.5,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 31,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 32,
@@ -365,7 +467,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 2.0,
-      "downfall": 0.0
+      "downfall": 0.0,
+      "canonical_id": 32,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 33,
@@ -376,7 +481,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 2.0,
-      "downfall": 0.0
+      "downfall": 0.0,
+      "canonical_id": 33,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 34,
@@ -387,7 +495,10 @@
       "water": 4020182,
       "grass_modifier": "none",
       "temperature": 0.05,
-      "downfall": 0.3
+      "downfall": 0.3,
+      "canonical_id": 34,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 35,
@@ -398,7 +509,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.0,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 35,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 36,
@@ -409,7 +523,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": -0.3,
-      "downfall": 0.9
+      "downfall": 0.9,
+      "canonical_id": 36,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 37,
@@ -420,7 +537,10 @@
       "water": 4020182,
       "grass_modifier": "none",
       "temperature": -0.5,
-      "downfall": 0.4
+      "downfall": 0.4,
+      "canonical_id": 37,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 38,
@@ -431,7 +551,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.95,
-      "downfall": 0.8
+      "downfall": 0.8,
+      "canonical_id": 38,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 39,
@@ -442,7 +565,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 1.0,
-      "downfall": 0.3
+      "downfall": 0.3,
+      "canonical_id": 39,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 40,
@@ -453,7 +579,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.2,
-      "downfall": 0.3
+      "downfall": 0.3,
+      "canonical_id": 40,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 41,
@@ -464,7 +593,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.8,
-      "downfall": 0.4
+      "downfall": 0.4,
+      "canonical_id": 41,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 42,
@@ -475,7 +607,10 @@
       "water": 6388580,
       "grass_modifier": "swamp",
       "temperature": 0.8,
-      "downfall": 0.9
+      "downfall": 0.9,
+      "canonical_id": 42,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 43,
@@ -486,7 +621,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.25,
-      "downfall": 0.8
+      "downfall": 0.8,
+      "canonical_id": 43,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 44,
@@ -497,7 +635,10 @@
       "water": 4445678,
       "grass_modifier": "none",
       "temperature": 0.5,
-      "downfall": 0.5
+      "downfall": 0.5,
+      "canonical_id": 44,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 45,
@@ -508,7 +649,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.2,
-      "downfall": 0.3
+      "downfall": 0.3,
+      "canonical_id": 45,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 46,
@@ -519,7 +663,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.2,
-      "downfall": 0.3
+      "downfall": 0.3,
+      "canonical_id": 46,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 47,
@@ -530,7 +677,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 0.2,
-      "downfall": 0.3
+      "downfall": 0.3,
+      "canonical_id": 47,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 48,
@@ -541,7 +691,10 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 2.0,
-      "downfall": 0.0
+      "downfall": 0.0,
+      "canonical_id": 48,
+      "pack": "minecraft",
+      "surface_available": true
     },
     {
       "id": 49,
@@ -552,14 +705,1104 @@
       "water": 4159204,
       "grass_modifier": "none",
       "temperature": 2.0,
-      "downfall": 0.0
+      "downfall": 0.0,
+      "canonical_id": 49,
+      "pack": "minecraft",
+      "surface_available": true
+    },
+    {
+      "id": 50,
+      "name": "regions_unexplored:alpha_grove",
+      "pack": "regions_unexplored",
+      "temperature": 0.6,
+      "downfall": 0.6,
+      "grass": 8901207,
+      "foliage": 6028091,
+      "water": 1857757,
+      "grass_modifier": "none",
+      "map": 8901207,
+      "surface_available": true,
+      "canonical_id": 50
+    },
+    {
+      "id": 51,
+      "name": "regions_unexplored:ancient_delta",
+      "pack": "regions_unexplored",
+      "temperature": 1.125,
+      "downfall": 0.8,
+      "grass": 16318340,
+      "foliage": 6659160,
+      "water": 3407871,
+      "grass_modifier": "none",
+      "map": 16318340,
+      "surface_available": false,
+      "canonical_id": 51
+    },
+    {
+      "id": 52,
+      "name": "regions_unexplored:arid_mountains",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 9470285,
+      "foliage": 10387789,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 9470285,
+      "surface_available": false,
+      "canonical_id": 52
+    },
+    {
+      "id": 53,
+      "name": "regions_unexplored:ashen_woodland",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 12434605,
+      "foliage": 15326658,
+      "water": 9147546,
+      "grass_modifier": "none",
+      "map": 12434605,
+      "surface_available": true,
+      "canonical_id": 53
+    },
+    {
+      "id": 54,
+      "name": "regions_unexplored:autumnal_maple_forest",
+      "pack": "regions_unexplored",
+      "temperature": 0.25,
+      "downfall": 0.35,
+      "grass": 13414979,
+      "foliage": 9877306,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 13414979,
+      "surface_available": true,
+      "canonical_id": 54
+    },
+    {
+      "id": 55,
+      "name": "regions_unexplored:bamboo_forest",
+      "pack": "regions_unexplored",
+      "temperature": 0.875,
+      "downfall": 0.8,
+      "grass": 11853428,
+      "foliage": 11140963,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 11853428,
+      "surface_available": true,
+      "canonical_id": 55
+    },
+    {
+      "id": 56,
+      "name": "regions_unexplored:baobab_savanna",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.35,
+      "grass": 12106325,
+      "foliage": 10140245,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 12106325,
+      "surface_available": true,
+      "canonical_id": 56
+    },
+    {
+      "id": 57,
+      "name": "regions_unexplored:barley_fields",
+      "pack": "regions_unexplored",
+      "temperature": 0.75,
+      "downfall": 0.7,
+      "grass": 14079353,
+      "foliage": 7844173,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 14079353,
+      "surface_available": false,
+      "canonical_id": 57
+    },
+    {
+      "id": 58,
+      "name": "regions_unexplored:bayou",
+      "pack": "regions_unexplored",
+      "temperature": 1.0,
+      "downfall": 1.0,
+      "grass": 8168020,
+      "foliage": 7443276,
+      "water": 4422730,
+      "grass_modifier": "none",
+      "map": 8168020,
+      "surface_available": true,
+      "canonical_id": 58
+    },
+    {
+      "id": 59,
+      "name": "regions_unexplored:bioshroom_caves",
+      "pack": "regions_unexplored",
+      "temperature": 1.25,
+      "downfall": 0.9,
+      "grass": 5683806,
+      "foliage": 5683855,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 5683806,
+      "surface_available": false,
+      "canonical_id": 59
+    },
+    {
+      "id": 60,
+      "name": "regions_unexplored:blackstone_basin",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 5463027,
+      "foliage": 5463027,
+      "water": 5463027,
+      "grass_modifier": "none",
+      "map": 5463027,
+      "surface_available": false,
+      "canonical_id": 60
+    },
+    {
+      "id": 61,
+      "name": "regions_unexplored:blackwood_taiga",
+      "pack": "regions_unexplored",
+      "temperature": 0.825,
+      "downfall": 0.765,
+      "grass": 4089639,
+      "foliage": 4347179,
+      "water": 3108258,
+      "grass_modifier": "none",
+      "map": 4089639,
+      "surface_available": true,
+      "canonical_id": 61
+    },
+    {
+      "id": 62,
+      "name": "regions_unexplored:boreal_taiga",
+      "pack": "regions_unexplored",
+      "temperature": 0.5,
+      "downfall": 0.4,
+      "grass": 8957796,
+      "foliage": 8103502,
+      "water": 4157364,
+      "grass_modifier": "none",
+      "map": 8957796,
+      "surface_available": true,
+      "canonical_id": 62
+    },
+    {
+      "id": 63,
+      "name": "regions_unexplored:chalk_cliffs",
+      "pack": "regions_unexplored",
+      "temperature": 0.775,
+      "downfall": 0.7,
+      "grass": 10732899,
+      "foliage": 8362574,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 10732899,
+      "surface_available": false,
+      "canonical_id": 63
+    },
+    {
+      "id": 64,
+      "name": "regions_unexplored:clover_plains",
+      "pack": "regions_unexplored",
+      "temperature": 1.0,
+      "downfall": 0.3,
+      "grass": 10732899,
+      "foliage": 10732899,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 10732899,
+      "surface_available": true,
+      "canonical_id": 64
+    },
+    {
+      "id": 65,
+      "name": "regions_unexplored:cold_boreal_taiga",
+      "pack": "regions_unexplored",
+      "temperature": 0.0,
+      "downfall": 0.6,
+      "grass": 6860132,
+      "foliage": 6854744,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 6860132,
+      "surface_available": true,
+      "canonical_id": 65
+    },
+    {
+      "id": 66,
+      "name": "regions_unexplored:cold_deciduous_forest",
+      "pack": "regions_unexplored",
+      "temperature": -1.5,
+      "downfall": 0.8,
+      "grass": 6732196,
+      "foliage": 5614468,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 6732196,
+      "surface_available": false,
+      "canonical_id": 66
+    },
+    {
+      "id": 67,
+      "name": "regions_unexplored:cold_river",
+      "pack": "regions_unexplored",
+      "temperature": 0.4,
+      "downfall": 0.7,
+      "grass": 12044129,
+      "foliage": 11059044,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 12044129,
+      "surface_available": true,
+      "canonical_id": 67
+    },
+    {
+      "id": 68,
+      "name": "regions_unexplored:deciduous_forest",
+      "pack": "regions_unexplored",
+      "temperature": 0.8,
+      "downfall": 0.6,
+      "grass": 8568660,
+      "foliage": 6532650,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8568660,
+      "surface_available": false,
+      "canonical_id": 68
+    },
+    {
+      "id": 69,
+      "name": "regions_unexplored:dry_bushland",
+      "pack": "regions_unexplored",
+      "temperature": 1.5,
+      "downfall": 0.0,
+      "grass": 13225101,
+      "foliage": 11716732,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 13225101,
+      "surface_available": true,
+      "canonical_id": 69
+    },
+    {
+      "id": 70,
+      "name": "regions_unexplored:eucalyptus_forest",
+      "pack": "regions_unexplored",
+      "temperature": 1.3,
+      "downfall": 0.85,
+      "grass": 9680182,
+      "foliage": 8828203,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 9680182,
+      "surface_available": true,
+      "canonical_id": 70
+    },
+    {
+      "id": 71,
+      "name": "regions_unexplored:fen",
+      "pack": "regions_unexplored",
+      "temperature": 0.85,
+      "downfall": 0.7,
+      "grass": 10858333,
+      "foliage": 8754506,
+      "water": 5147571,
+      "grass_modifier": "none",
+      "map": 10858333,
+      "surface_available": true,
+      "canonical_id": 71
+    },
+    {
+      "id": 72,
+      "name": "regions_unexplored:flower_fields",
+      "pack": "regions_unexplored",
+      "temperature": 0.975,
+      "downfall": 0.8,
+      "grass": 7588171,
+      "foliage": 6141763,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 7588171,
+      "surface_available": true,
+      "canonical_id": 72
+    },
+    {
+      "id": 73,
+      "name": "regions_unexplored:frozen_pine_taiga",
+      "pack": "regions_unexplored",
+      "temperature": -0.5,
+      "downfall": 0.6,
+      "grass": 6860132,
+      "foliage": 6854744,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 6860132,
+      "surface_available": true,
+      "canonical_id": 73
+    },
+    {
+      "id": 74,
+      "name": "regions_unexplored:frozen_tundra",
+      "pack": "regions_unexplored",
+      "temperature": -0.3,
+      "downfall": 0.0,
+      "grass": 12347986,
+      "foliage": 11569232,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 12347986,
+      "surface_available": false,
+      "canonical_id": 74
+    },
+    {
+      "id": 75,
+      "name": "regions_unexplored:fungal_fen",
+      "pack": "regions_unexplored",
+      "temperature": 1.15,
+      "downfall": 1.0,
+      "grass": 8173383,
+      "foliage": 10667597,
+      "water": 6338444,
+      "grass_modifier": "none",
+      "map": 8173383,
+      "surface_available": true,
+      "canonical_id": 75
+    },
+    {
+      "id": 76,
+      "name": "regions_unexplored:glistering_meadow",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 12058781,
+      "foliage": 12058781,
+      "water": 12058781,
+      "grass_modifier": "none",
+      "map": 12058781,
+      "surface_available": false,
+      "canonical_id": 76
+    },
+    {
+      "id": 77,
+      "name": "regions_unexplored:golden_boreal_taiga",
+      "pack": "regions_unexplored",
+      "temperature": 0.45,
+      "downfall": 0.3,
+      "grass": 10400607,
+      "foliage": 12562512,
+      "water": 4157364,
+      "grass_modifier": "none",
+      "map": 10400607,
+      "surface_available": false,
+      "canonical_id": 77
+    },
+    {
+      "id": 78,
+      "name": "regions_unexplored:grassland",
+      "pack": "regions_unexplored",
+      "temperature": 0.85,
+      "downfall": 0.45,
+      "grass": 10732899,
+      "foliage": 9617236,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 10732899,
+      "surface_available": true,
+      "canonical_id": 78
+    },
+    {
+      "id": 79,
+      "name": "regions_unexplored:grassy_beach",
+      "pack": "regions_unexplored",
+      "temperature": 0.85,
+      "downfall": 0.75,
+      "grass": 14079353,
+      "foliage": 7844173,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 14079353,
+      "surface_available": true,
+      "canonical_id": 79
+    },
+    {
+      "id": 80,
+      "name": "regions_unexplored:gravel_beach",
+      "pack": "regions_unexplored",
+      "temperature": 0.6,
+      "downfall": 0.6,
+      "grass": 8957796,
+      "foliage": 8103502,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8957796,
+      "surface_available": true,
+      "canonical_id": 80
+    },
+    {
+      "id": 81,
+      "name": "regions_unexplored:highland_fields",
+      "pack": "regions_unexplored",
+      "temperature": 0.65,
+      "downfall": 0.6,
+      "grass": 6994539,
+      "foliage": 8501866,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 6994539,
+      "surface_available": true,
+      "canonical_id": 81
+    },
+    {
+      "id": 82,
+      "name": "regions_unexplored:hyacinth_deeps",
+      "pack": "regions_unexplored",
+      "temperature": 0.5,
+      "downfall": 0.5,
+      "grass": 6994539,
+      "foliage": 8501866,
+      "water": 3770057,
+      "grass_modifier": "none",
+      "map": 6994539,
+      "surface_available": true,
+      "canonical_id": 82
+    },
+    {
+      "id": 83,
+      "name": "regions_unexplored:icy_heights",
+      "pack": "regions_unexplored",
+      "temperature": -1.0,
+      "downfall": 0.7,
+      "grass": 7718027,
+      "foliage": 6863471,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 7718027,
+      "surface_available": true,
+      "canonical_id": 83
+    },
+    {
+      "id": 84,
+      "name": "regions_unexplored:infernal_holt",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 7295817,
+      "foliage": 7295817,
+      "water": 3479565,
+      "grass_modifier": "none",
+      "map": 7295817,
+      "surface_available": false,
+      "canonical_id": 84
+    },
+    {
+      "id": 85,
+      "name": "regions_unexplored:inferno",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 8155744,
+      "foliage": 7827302,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8155744,
+      "surface_available": false,
+      "canonical_id": 85
+    },
+    {
+      "id": 86,
+      "name": "regions_unexplored:joshua_desert",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 16772003,
+      "foliage": 8367693,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 16772003,
+      "surface_available": true,
+      "canonical_id": 86
+    },
+    {
+      "id": 87,
+      "name": "regions_unexplored:magnolia_woodland",
+      "pack": "regions_unexplored",
+      "temperature": 0.95,
+      "downfall": 0.8,
+      "grass": 10406459,
+      "foliage": 8437033,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 10406459,
+      "surface_available": true,
+      "canonical_id": 87
+    },
+    {
+      "id": 88,
+      "name": "regions_unexplored:maple_forest",
+      "pack": "regions_unexplored",
+      "temperature": 0.6,
+      "downfall": 0.5,
+      "grass": 9550928,
+      "foliage": 6462505,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 9550928,
+      "surface_available": true,
+      "canonical_id": 88
+    },
+    {
+      "id": 89,
+      "name": "regions_unexplored:marsh",
+      "pack": "regions_unexplored",
+      "temperature": 1.0,
+      "downfall": 1.0,
+      "grass": 6975545,
+      "foliage": 8438124,
+      "water": 4684727,
+      "grass_modifier": "swamp",
+      "map": 6975545,
+      "surface_available": true,
+      "canonical_id": 89
+    },
+    {
+      "id": 90,
+      "name": "regions_unexplored:mauve_hills",
+      "pack": "regions_unexplored",
+      "temperature": 1.1,
+      "downfall": 0.85,
+      "grass": 7518088,
+      "foliage": 11381503,
+      "water": 5546361,
+      "grass_modifier": "none",
+      "map": 7518088,
+      "surface_available": false,
+      "canonical_id": 90
+    },
+    {
+      "id": 91,
+      "name": "regions_unexplored:mountains",
+      "pack": "regions_unexplored",
+      "temperature": 0.25,
+      "downfall": 0.6,
+      "grass": 8693594,
+      "foliage": 7702086,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8693594,
+      "surface_available": false,
+      "canonical_id": 91
+    },
+    {
+      "id": 92,
+      "name": "regions_unexplored:muddy_river",
+      "pack": "regions_unexplored",
+      "temperature": 0.6,
+      "downfall": 0.7,
+      "grass": 10732899,
+      "foliage": 9617236,
+      "water": 4157364,
+      "grass_modifier": "none",
+      "map": 10732899,
+      "surface_available": true,
+      "canonical_id": 92
+    },
+    {
+      "id": 93,
+      "name": "regions_unexplored:mycotoxic_undergrowth",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 10717988,
+      "foliage": 10717988,
+      "water": 10717988,
+      "grass_modifier": "none",
+      "map": 10717988,
+      "surface_available": false,
+      "canonical_id": 93
+    },
+    {
+      "id": 94,
+      "name": "regions_unexplored:old_growth_bayou",
+      "pack": "regions_unexplored",
+      "temperature": 1.2,
+      "downfall": 1.0,
+      "grass": 8168020,
+      "foliage": 7443276,
+      "water": 4422730,
+      "grass_modifier": "none",
+      "map": 8168020,
+      "surface_available": true,
+      "canonical_id": 94
+    },
+    {
+      "id": 95,
+      "name": "regions_unexplored:old_growth_boreal_taiga",
+      "pack": "regions_unexplored",
+      "temperature": 0.5,
+      "downfall": 0.4,
+      "grass": 8957796,
+      "foliage": 8103502,
+      "water": 4157364,
+      "grass_modifier": "none",
+      "map": 8957796,
+      "surface_available": true,
+      "canonical_id": 95
+    },
+    {
+      "id": 96,
+      "name": "regions_unexplored:old_growth_forest",
+      "pack": "regions_unexplored",
+      "temperature": 0.8,
+      "downfall": 0.6,
+      "grass": 8568660,
+      "foliage": 6532650,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8568660,
+      "surface_available": true,
+      "canonical_id": 96
+    },
+    {
+      "id": 97,
+      "name": "regions_unexplored:old_growth_golden_boreal_taiga",
+      "pack": "regions_unexplored",
+      "temperature": 0.45,
+      "downfall": 0.3,
+      "grass": 10400607,
+      "foliage": 12562512,
+      "water": 4157364,
+      "grass_modifier": "none",
+      "map": 10400607,
+      "surface_available": true,
+      "canonical_id": 97
+    },
+    {
+      "id": 98,
+      "name": "regions_unexplored:orchard",
+      "pack": "regions_unexplored",
+      "temperature": 0.7,
+      "downfall": 0.4,
+      "grass": 11717735,
+      "foliage": 10669160,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 11717735,
+      "surface_available": true,
+      "canonical_id": 98
+    },
+    {
+      "id": 99,
+      "name": "regions_unexplored:outback",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 12106325,
+      "foliage": 8760406,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 12106325,
+      "surface_available": true,
+      "canonical_id": 99
+    },
+    {
+      "id": 100,
+      "name": "regions_unexplored:pine_slopes",
+      "pack": "regions_unexplored",
+      "temperature": 0.4,
+      "downfall": 0.4,
+      "grass": 8693594,
+      "foliage": 7702086,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8693594,
+      "surface_available": true,
+      "canonical_id": 100
+    },
+    {
+      "id": 101,
+      "name": "regions_unexplored:pine_taiga",
+      "pack": "regions_unexplored",
+      "temperature": 0.6,
+      "downfall": 0.4,
+      "grass": 8693594,
+      "foliage": 7702086,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8693594,
+      "surface_available": true,
+      "canonical_id": 101
+    },
+    {
+      "id": 102,
+      "name": "regions_unexplored:poppy_fields",
+      "pack": "regions_unexplored",
+      "temperature": 0.7,
+      "downfall": 0.5,
+      "grass": 8700997,
+      "foliage": 7578936,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8700997,
+      "surface_available": true,
+      "canonical_id": 102
+    },
+    {
+      "id": 103,
+      "name": "regions_unexplored:prairie",
+      "pack": "regions_unexplored",
+      "temperature": 0.75,
+      "downfall": 0.7,
+      "grass": 14079353,
+      "foliage": 7844173,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 14079353,
+      "surface_available": true,
+      "canonical_id": 103
+    },
+    {
+      "id": 104,
+      "name": "regions_unexplored:prismachasm",
+      "pack": "regions_unexplored",
+      "temperature": 0.925,
+      "downfall": 0.9,
+      "grass": 10151862,
+      "foliage": 39423,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 10151862,
+      "surface_available": false,
+      "canonical_id": 104
+    },
+    {
+      "id": 105,
+      "name": "regions_unexplored:pumpkin_fields",
+      "pack": "regions_unexplored",
+      "temperature": 0.25,
+      "downfall": 0.35,
+      "grass": 13414979,
+      "foliage": 9877306,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 13414979,
+      "surface_available": false,
+      "canonical_id": 105
+    },
+    {
+      "id": 106,
+      "name": "regions_unexplored:rainforest",
+      "pack": "regions_unexplored",
+      "temperature": 0.95,
+      "downfall": 0.9,
+      "grass": 7058761,
+      "foliage": 5744945,
+      "water": 2202835,
+      "grass_modifier": "none",
+      "map": 7058761,
+      "surface_available": true,
+      "canonical_id": 106
+    },
+    {
+      "id": 107,
+      "name": "regions_unexplored:redstone_abyss",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 10623252,
+      "foliage": 10623252,
+      "water": 10623252,
+      "grass_modifier": "none",
+      "map": 10623252,
+      "surface_available": false,
+      "canonical_id": 107
+    },
+    {
+      "id": 108,
+      "name": "regions_unexplored:redstone_caves",
+      "pack": "regions_unexplored",
+      "temperature": 0.8,
+      "downfall": 0.7,
+      "grass": 10732899,
+      "foliage": 10732899,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 10732899,
+      "surface_available": false,
+      "canonical_id": 108
+    },
+    {
+      "id": 109,
+      "name": "regions_unexplored:redwoods",
+      "pack": "regions_unexplored",
+      "temperature": 1.0,
+      "downfall": 0.8,
+      "grass": 8101689,
+      "foliage": 8295737,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8101689,
+      "surface_available": true,
+      "canonical_id": 109
+    },
+    {
+      "id": 110,
+      "name": "regions_unexplored:rocky_meadow",
+      "pack": "regions_unexplored",
+      "temperature": 1.1,
+      "downfall": 0.85,
+      "grass": 7518088,
+      "foliage": 11381503,
+      "water": 5546361,
+      "grass_modifier": "none",
+      "map": 7518088,
+      "surface_available": false,
+      "canonical_id": 110
+    },
+    {
+      "id": 111,
+      "name": "regions_unexplored:rocky_reef",
+      "pack": "regions_unexplored",
+      "temperature": 0.8,
+      "downfall": 0.5,
+      "grass": 5551419,
+      "foliage": 5159476,
+      "water": 3521750,
+      "grass_modifier": "none",
+      "map": 5551419,
+      "surface_available": true,
+      "canonical_id": 111
+    },
+    {
+      "id": 112,
+      "name": "regions_unexplored:saguaro_desert",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 12564309,
+      "foliage": 9940521,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 12564309,
+      "surface_available": true,
+      "canonical_id": 112
+    },
+    {
+      "id": 113,
+      "name": "regions_unexplored:scorching_caves",
+      "pack": "regions_unexplored",
+      "temperature": 2.0,
+      "downfall": 0.0,
+      "grass": 8155744,
+      "foliage": 7827302,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8155744,
+      "surface_available": false,
+      "canonical_id": 113
+    },
+    {
+      "id": 114,
+      "name": "regions_unexplored:shrubland",
+      "pack": "regions_unexplored",
+      "temperature": 0.575,
+      "downfall": 0.4,
+      "grass": 10139483,
+      "foliage": 7778135,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 10139483,
+      "surface_available": true,
+      "canonical_id": 114
+    },
+    {
+      "id": 115,
+      "name": "regions_unexplored:silver_birch_forest",
+      "pack": "regions_unexplored",
+      "temperature": 0.5,
+      "downfall": 0.6,
+      "grass": 11585338,
+      "foliage": 8960834,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 11585338,
+      "surface_available": true,
+      "canonical_id": 115
+    },
+    {
+      "id": 116,
+      "name": "regions_unexplored:sparse_rainforest",
+      "pack": "regions_unexplored",
+      "temperature": 0.95,
+      "downfall": 0.9,
+      "grass": 7058761,
+      "foliage": 5744945,
+      "water": 2202835,
+      "grass_modifier": "none",
+      "map": 7058761,
+      "surface_available": true,
+      "canonical_id": 116
+    },
+    {
+      "id": 117,
+      "name": "regions_unexplored:sparse_redwoods",
+      "pack": "regions_unexplored",
+      "temperature": 1.0,
+      "downfall": 0.8,
+      "grass": 8101689,
+      "foliage": 8295737,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8101689,
+      "surface_available": true,
+      "canonical_id": 117
+    },
+    {
+      "id": 118,
+      "name": "regions_unexplored:spires",
+      "pack": "regions_unexplored",
+      "temperature": -2.0,
+      "downfall": 0.95,
+      "grass": 5679728,
+      "foliage": 5679714,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 5679728,
+      "surface_available": true,
+      "canonical_id": 118
+    },
+    {
+      "id": 119,
+      "name": "regions_unexplored:steppe",
+      "pack": "regions_unexplored",
+      "temperature": 1.5,
+      "downfall": 0.15,
+      "grass": 11709541,
+      "foliage": 11188081,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 11709541,
+      "surface_available": false,
+      "canonical_id": 119
+    },
+    {
+      "id": 120,
+      "name": "regions_unexplored:temperate_grove",
+      "pack": "regions_unexplored",
+      "temperature": 0.725,
+      "downfall": 0.6,
+      "grass": 8432236,
+      "foliage": 7054415,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8432236,
+      "surface_available": false,
+      "canonical_id": 120
+    },
+    {
+      "id": 121,
+      "name": "regions_unexplored:towering_cliffs",
+      "pack": "regions_unexplored",
+      "temperature": 0.75,
+      "downfall": 0.8,
+      "grass": 8294482,
+      "foliage": 9415008,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8294482,
+      "surface_available": true,
+      "canonical_id": 121
+    },
+    {
+      "id": 122,
+      "name": "regions_unexplored:tropical_river",
+      "pack": "regions_unexplored",
+      "temperature": 0.8,
+      "downfall": 0.7,
+      "grass": 6798388,
+      "foliage": 4237620,
+      "water": 2202835,
+      "grass_modifier": "none",
+      "map": 6798388,
+      "surface_available": true,
+      "canonical_id": 122
+    },
+    {
+      "id": 123,
+      "name": "regions_unexplored:tropics",
+      "pack": "regions_unexplored",
+      "temperature": 1.05,
+      "downfall": 0.95,
+      "grass": 5551419,
+      "foliage": 5159476,
+      "water": 3521750,
+      "grass_modifier": "none",
+      "map": 5551419,
+      "surface_available": true,
+      "canonical_id": 123
+    },
+    {
+      "id": 124,
+      "name": "regions_unexplored:tundra",
+      "pack": "regions_unexplored",
+      "temperature": -0.3,
+      "downfall": 0.0,
+      "grass": 12347986,
+      "foliage": 11569232,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 12347986,
+      "surface_available": true,
+      "canonical_id": 124
+    },
+    {
+      "id": 125,
+      "name": "regions_unexplored:willow_forest",
+      "pack": "regions_unexplored",
+      "temperature": 0.6,
+      "downfall": 0.5,
+      "grass": 8037223,
+      "foliage": 7778144,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8037223,
+      "surface_available": true,
+      "canonical_id": 125
+    },
+    {
+      "id": 126,
+      "name": "regions_unexplored:windswept_maple_forest",
+      "pack": "regions_unexplored",
+      "temperature": 0.725,
+      "downfall": 0.6,
+      "grass": 8432236,
+      "foliage": 7054415,
+      "water": 4159204,
+      "grass_modifier": "none",
+      "map": 8432236,
+      "surface_available": true,
+      "canonical_id": 126
+    },
+    {
+      "id": 127,
+      "name": "regions_unexplored:wisteria_grove",
+      "pack": "regions_unexplored",
+      "temperature": 1.1,
+      "downfall": 0.85,
+      "grass": 7518088,
+      "foliage": 11381503,
+      "water": 5546361,
+      "grass_modifier": "none",
+      "map": 7518088,
+      "surface_available": true,
+      "canonical_id": 127
     }
   ],
-  "source_sha256": {
-    "client.jar": "499f6897d1837516680f3114072d8106e11c9adcd933fe5cf051b551089b0c99",
-    "server-inner.jar": "c301de10f575027d13eac18c7f34409d60648cf56a35d566aa1f530ff617840a",
-    "biome-parameters.json": "88516076578176f105d6d4276acfde1ada337b9efac96d1abb3a1eaa9144925e",
-    "biome-tree.json": "49c6ed160c8b255f3412f434dcd9a548bc28b5f9682ac724c6b6638b43ec282e",
-    "biome-noise.json": "59e3a13356466a54cbebe514bb3d5d9d014533d64226ca9452ac6de8c7c32200"
-  }
+  "selection": "Vanilla 1.21.1 surface climate RTree plus Regions Unexplored 0.6.3 (MIT) replacements.",
+  "limitations": "FTF terrain retained with Vanilla 1.21.1 and Regions Unexplored 0.6.3 (MIT). Custom surface rules are approximate."
 }

@@ -63,7 +63,7 @@ private:
     void start(uint32_t grid,bool final){
         try{if(!initialized){worker.initialize(&visible);worker.useMountainCache=visible.useMountainCache;initialized=true;}
             worker.ensure(grid,1,1);work=latest;work.params.meta.x=grid;work.revision=++serial;
-            worker.updateRivers(work.rivers);job=true;refining=final;
+            worker.updateRivers(work.rivers);worker.updateVoronoi(work.params,work.seeds);job=true;refining=final;
         }catch(const std::exception& e){error=e.what();job=false;}
     }
 };

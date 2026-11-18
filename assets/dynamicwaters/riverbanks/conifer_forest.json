@@ -1,0 +1,14 @@
+{
+  "where": {
+    "biomes": ["minecraft:taiga", "minecraft:old_growth_pine_taiga", "minecraft:old_growth_spruce_taiga"],
+    "tags": ["c:is_taiga"],
+    "not": ["#c:is_snowy"]
+  },
+  "rapids": ["minecraft:gravel*4", "minecraft:cobblestone*3", "minecraft:mossy_cobblestone*2", "minecraft:stone"],
+  "silt": ["minecraft:gravel*3", "minecraft:sand*2", "minecraft:clay"],
+  "shore": ["keep*4", "minecraft:podzol*3", "minecraft:mossy_cobblestone", "minecraft:gravel"],
+  "bars": ["minecraft:gravel*4", "minecraft:sand"],
+  "flats": ["keep*3", "minecraft:podzol", "minecraft:gravel"],
+  "patch_size": 5,
+  "shore_height": 1
+}

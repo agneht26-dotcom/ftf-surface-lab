@@ -1,0 +1,13 @@
+{
+  "where": {
+    "biomes": ["minecraft:stony_shore"],
+    "tags": ["c:is_stony_shores"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:cobblestone*2", "minecraft:stone*2"],
+  "silt": ["minecraft:gravel*3", "minecraft:sand"],
+  "shore": ["keep*3", "minecraft:gravel*2", "minecraft:cobblestone"],
+  "bars": ["minecraft:gravel*4", "minecraft:sand"],
+  "flats": ["minecraft:gravel*2", "keep*2"],
+  "patch_size": 4,
+  "shore_height": 1
+}

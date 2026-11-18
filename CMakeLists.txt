@@ -30,27 +30,19 @@ target_link_libraries(imgui PUBLIC volk glfw)
 
 find_program(GLSLANG_EXECUTABLE NAMES glslang.exe glslangValidator.exe
     PATHS "${CMAKE_SOURCE_DIR}/.tools/glslang/bin" REQUIRED)
-set(SHADER_OUTPUTS)
-foreach(SHADER terrain.comp terrain.vert terrain.frag filter.comp mountain_cache.comp mountain_segments.comp world_map.comp ocean_floor.comp island_surface.comp climate.comp world_filter.comp rivers.comp biomes.comp atmosphere.vert atmosphere.frag)
-    set(OUTPUT "${CMAKE_BINARY_DIR}/shaders/${SHADER}.spv")
-    add_custom_command(OUTPUT "${OUTPUT}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/shaders"
-        COMMAND "${GLSLANG_EXECUTABLE}" -V --target-env vulkan1.1 -I"${CMAKE_SOURCE_DIR}/shaders"
-            "${CMAKE_SOURCE_DIR}/shaders/${SHADER}" -o "${OUTPUT}"
-        DEPENDS "${CMAKE_SOURCE_DIR}/shaders/${SHADER}" "${CMAKE_SOURCE_DIR}/shaders/shared.glsl"
-            "${CMAKE_SOURCE_DIR}/shaders/ftf_terrain.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_regions.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_cells.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_mix.glsl"
-            "${CMAKE_SOURCE_DIR}/shaders/ftf_mountains.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_sin.glsl"
-            "${CMAKE_SOURCE_DIR}/shaders/ftf_land.glsl"
-            "${CMAKE_SOURCE_DIR}/shaders/ftf_world.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_water_steps.glsl"
-            "${CMAKE_SOURCE_DIR}/shaders/ftf_islands.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_climate.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_region_cells.glsl" "${CMAKE_SOURCE_DIR}/shaders/cell_state.glsl" "${CMAKE_SOURCE_DIR}/shaders/materials.glsl" "${CMAKE_SOURCE_DIR}/shaders/material_rules_generated.glsl" "${CMAKE_SOURCE_DIR}/shaders/mod_material_rules_generated.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_filters.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_erosion.glsl" "${CMAKE_SOURCE_DIR}/shaders/ftf_rivers.glsl"
-        VERBATIM)
-    list(APPEND SHADER_OUTPUTS "${OUTPUT}")
-endforeach()
-add_custom_target(shaders ALL DEPENDS ${SHADER_OUTPUTS})
+find_program(PYTHON_EXECUTABLE NAMES python.exe python python3 REQUIRED)
+add_custom_target(shaders ALL
+    COMMAND "${PYTHON_EXECUTABLE}" -B "${CMAKE_SOURCE_DIR}/tools/compile_shaders.py"
+        --glslang "${GLSLANG_EXECUTABLE}"
+        --source-dir "${CMAKE_SOURCE_DIR}/shaders"
+        --out-dir "${CMAKE_BINARY_DIR}/shaders"
+    COMMENT "Updating SPIR-V shaders (FP64 + FP32 fallback)"
+    VERBATIM)
 
-add_executable(FTFSurface src/main.cpp src/gpu.cpp src/surface.cpp src/surface_generation.cpp src/preset.cpp src/datapack.cpp src/ftf_packgen.cpp src/library.cpp src/preview.cpp src/mix.cpp src/world.cpp src/cpu_world.cpp src/rivers.cpp)
+add_executable(FTFSurface src/main.cpp src/gpu.cpp src/surface.cpp src/surface_generation.cpp src/preset.cpp src/datapack.cpp src/ftf_packgen.cpp src/library.cpp src/preview.cpp src/mix.cpp src/world.cpp src/cpu_world.cpp src/rivers.cpp src/dynamic_waters_rivers.cpp src/dynamic_waters_basin.cpp src/dynamic_waters_hydrology.cpp)
 target_link_libraries(FTFSurface PRIVATE imgui comdlg32 miniz shell32 ole32 dbghelp)
 if(MSVC)
+    target_compile_options(imgui PRIVATE /MP)
     target_link_options(FTFSurface PRIVATE "/MAP:${CMAKE_BINARY_DIR}/FTFSurface.map")
     # GraphSeeds carries the per-seed vanilla noise and strata tables (47 KB); the frame loop keeps several copies on the stack.
     target_link_options(FTFSurface PRIVATE "/STACK:16777216")
@@ -59,7 +51,7 @@ target_include_directories(FTFSurface PRIVATE third_party/glm third_party/json/s
 target_compile_definitions(FTFSurface PRIVATE
     GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE NOMINMAX WIN32_LEAN_AND_MEAN)
 if(MSVC)
-    target_compile_options(FTFSurface PRIVATE /W4 /EHsc /utf-8 /permissive-)
+    target_compile_options(FTFSurface PRIVATE /MP /W4 /EHsc /utf-8 /permissive-)
 endif()
 add_dependencies(FTFSurface shaders)
 add_custom_target(content ALL

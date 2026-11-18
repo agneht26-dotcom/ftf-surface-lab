@@ -35,10 +35,12 @@ public:
     uint32_t validationErrors{};
     bool validationActive{};
     bool memoryBudgetAvailable{};
+    bool hasFloat64{true};
+    bool deviceSupportsFloat64{true};
     VkDebugUtilsMessengerEXT debugMessenger{};
     std::filesystem::path shaderRoot;
 
-    void initialize(GLFWwindow* nativeWindow);
+    void initialize(GLFWwindow* nativeWindow, bool allowFloat64 = true);
     void initializeGui();
     VkCommandBuffer begin();
     void end(ImDrawData* ui);

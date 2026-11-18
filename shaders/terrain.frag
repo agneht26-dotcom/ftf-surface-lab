@@ -18,7 +18,7 @@ uint canonicalBiome(uint biome){if(biome>=biomeLookup.words[1])return 0xffffffff
 float sampleHeight(vec2 world){
     vec2 p=world-d.limits.zw;float extent=d.view.x;
     bool coarse=d.focus.w>0.0&&(length(p)>d.focus.w||any(greaterThan(abs(p),vec2(extent*.5))));
-    if(coarse){if(detailHole.w<.5)p+=d.focus.xy;extent=d.focus.z;}
+    if(coarse){if(detailHole.w<.5)p+=d.focus.xy;else p+=d.focus.xy-detailHole.xy;extent=d.focus.z;}
     ivec2 size=coarse?imageSize(coarseField):imageSize(surfaceField);
     vec2 f=clamp(p/extent+.5,vec2(0),vec2(1))*vec2(size-1);ivec2 a=ivec2(f),b=min(a+1,size-1);vec2 t=fract(f);
     float h00=coarse?imageLoad(coarseField,a).x:imageLoad(surfaceField,a).x;
@@ -78,11 +78,11 @@ void main(){
         vec2 local=worldXZ-d.limits.zw;
         if(screenFocus.w>0.0){
             float screenDistance=length(gl_FragCoord.xy-screenFocus.xy);
-            if(d.focus.w>0.0){if(screenDistance>screenFocus.z||any(greaterThan(abs(local+d.focus.xy),vec2((detailHole.w>.5?detailHole.w:d.focus.z)*.5))))discard;}
+            if(d.focus.w>0.0){if(screenDistance>screenFocus.z||any(greaterThan(abs(local+(detailHole.w>.5?d.focus.xy-detailHole.xy:d.focus.xy)),vec2((detailHole.w>.5?detailHole.w:d.focus.z)*.5))))discard;}
             else if(screenDistance<screenFocus.z&&all(lessThan(abs(local-d.focus.xy),vec2(-d.focus.w*.96))))discard;
         }else{
             float distanceFromCenter=d.focus.w>0.0?length(local):length(local-d.focus.xy);
-            if(d.focus.w>0.0&&(distanceFromCenter>d.focus.w||any(greaterThan(abs(local+d.focus.xy),vec2((detailHole.w>.5?detailHole.w:d.focus.z)*.5)))))discard;
+            if(d.focus.w>0.0&&(distanceFromCenter>d.focus.w||any(greaterThan(abs(local+(detailHole.w>.5?d.focus.xy-detailHole.xy:d.focus.xy)),vec2((detailHole.w>.5?detailHole.w:d.focus.z)*.5)))))discard;
             if(d.focus.w<0.0&&distanceFromCenter<-d.focus.w)discard;
         }
     }

@@ -1,0 +1,13 @@
+{
+  "where": {
+    "biomes": ["minecraft:desert"],
+    "tags": ["c:is_desert"]
+  },
+  "rapids": ["minecraft:sand*3", "minecraft:sandstone*2", "minecraft:gravel"],
+  "silt": ["minecraft:sand*5", "minecraft:clay"],
+  "shore": ["minecraft:sand*4", "keep*2", "minecraft:sandstone"],
+  "bars": ["minecraft:sand"],
+  "flats": ["minecraft:sand*3", "keep"],
+  "patch_size": 6,
+  "shore_height": 1
+}

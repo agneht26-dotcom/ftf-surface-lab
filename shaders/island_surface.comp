@@ -19,7 +19,7 @@ void main(){
     vec4 field=imageLoad(rawField,ivec2(q));float choice=round(imageLoad(colors,ivec2(q)).a*255.0);
     vec3 mixed=vec3(worldDiv(field.x,graph.worldLevels.w),field.y,choice);
     if(graph.islandMeta.x!=0u&&choice>=65.0)mixed=ftfIslands(world*worldDiv(1.0,p.ftfScales.x),mixed);
-    if(mixed.z>=68.0&&mixed.x>worldDiv(min(graph.worldLevels.z-1.0,graph.worldLevels.w),graph.worldLevels.w)){cells[q.y*n+q.x].erosion=.25;cells[q.y*n+q.x].weirdness=(-.4-.26666668)*.5;}
+    if(mixed.z>=68.0&&mixed.x>worldDiv(min(graph.worldLevels.z-1.0,graph.worldLevels.w),graph.worldLevels.w)){cells[q.y*n+q.x].erosion=.25;cells[q.y*n+q.x].weirdness=(graph.filterMeta2.x>=4u&&mixed.z==72.0)?(-.26666668-.05)*.5:(-.4-.26666668)*.5;}
     if(graph.filterMeta2.z!=0u&&graph.mountainMeta.z!=0u)mixed.x=ftfCeilingNorm(mixed.x,graph.worldLevels.w,graph.filter5.y); // 1.0.0013+: ceiling is part of the terrain stage, before rivers
     mixed.x*=graph.worldLevels.w;float h=mixed.x;
     uint index=q.y*n+q.x;cells[index].riverMask=1.0;cells[index].sediment=0.0;cells[index].terrain=terrainFromChoice(uint(mixed.z));cells[index].waterHeight=0.0;cells[index].gateMin=0.0;

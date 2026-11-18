@@ -1,9 +1,9 @@
 #pragma once
 #include "surface.hpp"
 #include <nlohmann/json.hpp>
-void buildUpliftInputs(const nlohmann::ordered_json& preset,int64_t worldSeed,GraphSeeds& output,bool islands=true);
+void buildUpliftInputs(const nlohmann::ordered_json& preset,int64_t worldSeed,GraphSeeds& output,bool islands=true,int ftfProfile=5);
 
-void buildClimateInputs(const nlohmann::ordered_json& preset,int64_t worldSeed,GraphSeeds& output,bool enabled=true);
+void buildClimateInputs(const nlohmann::ordered_json& preset,int64_t worldSeed,GraphSeeds& output,bool enabled=true,int ftfProfile=5);
 
 void buildWorldFilterInputs(const nlohmann::ordered_json& preset,int64_t worldSeed,GraphSeeds& output,bool enabled=true,int ftfProfile=1);
 

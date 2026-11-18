@@ -17,6 +17,8 @@ layout(std430,set=0,binding=3) readonly buffer GraphSeedBuffer {
     uvec4 strataMeta;uint strata[4100];   // FTF StrataRule stacks (world.cpp buildStrata)
     uvec4 surfaceRandom;uvec4 gradientRandoms[2];uint clayBands[48];uint simplexPerms[256];uint improvedNoises[6720];   // world.cpp buildVanillaSurface
     uvec4 regionSalts;   // FTF region rendezvous salts (world.cpp)
+    vec4 climateErosion0;vec4 climateErosion1;uvec4 climateExtraSeeds;vec4 upliftExtra;
+    vec4 upliftExtra2;uvec4 upliftSeeds;
 } graph;
 vec2 terrainBiome=vec2(-1.1);float terrainShapeWeirdness=-.06;
 
@@ -105,8 +107,8 @@ float ftfPlateau(vec2 p,float vertical){
     precise float cubic=ftfCubicNode(p,terrainSeed(8),500,1)*.6+.3;
     precise float inputHeight=clamp(valley*cubic+top,0.0,.999999);
     terrainShapeWeirdness=ftfLerp((-.26666668+(-.05))*.5,-.42,ftfMap(inputHeight,0.0,.415));
-    // Terrace's step spacing uses its input graph's declared maximum, not 1.
-    precise float maximum=.6;maximum+=.3;maximum+=.15;
+    // Terrace's step spacing uses its input graph's declared maximum (Cubic.maxValue() is 0.75).
+    precise float maximum=.75*.6;maximum+=.3;maximum+=.15;
     precise float spacing=float(double(maximum)/3.0),bound=(spacing-spacing*.4)/2.0;
     int index=int(inputHeight*4.0);precise float value=float(index)*spacing,next=float(index+1)*spacing;
     precise float lower=value-bound,upper=value+bound;

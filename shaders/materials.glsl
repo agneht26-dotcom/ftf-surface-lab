@@ -102,7 +102,7 @@ uint materialScree(uint top,uint index){if((graph.surfaceMeta.x&1u)==0u)return t
     // surfaceY (WORLD_SURFACE_WG, water included) above the terrain or below sea level - 1 is skipped.
     if(terrain==10u||terrain==11u||matColumnHeight>matTopY||matColumnHeight<int(graph.worldLevels.z)-1||matBiome==MATERIAL_BIOME_WOODED_BADLANDS||matBiome==MATERIAL_BIOME_BADLANDS||(materialTags(top)&1u)==0u)return top;
     precise float height=worldDiv(matHeight,graph.worldLevels.w)+materialWhite(matWorld,0u)*graph.scree1.w,steepness=matGradient+materialWhite(matWorld,1u)*.011764706;
-    vec4 continent=ftfUplift(matWorld);float baseline=worldDiv(min(graph.worldLevels.z-1.0,graph.worldLevels.w),graph.worldLevels.w)+continentWaterHeight(continent.y,continent.z),variance=materialPerlin(matWorld,0u,100);
+    float baseline=worldDiv(min(graph.worldLevels.z-1.0,graph.worldLevels.w),graph.worldLevels.w)+ftfContinentWaterHeight(matWorld),variance=materialPerlin(matWorld,0u,100);
     precise float rockThreshold=variance*worldDiv(graph.scree0.x,255.0)+baseline+worldDiv(graph.scree0.y,255.0),dirtThreshold=variance*worldDiv(graph.scree0.z,255.0)+baseline+worldDiv(graph.scree0.w,255.0);
     // getMaterial: rock(defaultBlock) is stone; any changed rock-tag result except tuff runs erodeRock and skips the scree.
     uint material=top,result=top;
@@ -119,7 +119,7 @@ float materialHeightAt(vec2 point){float n=float(p.meta.x);point=clamp(point,vec
 bool materialWaterCell(uint i){uint t=cells[i].terrain&255u;return t==11u||((t==10u||t==12u)&&cells[i].waterHeight>0.0);}
 float materialWaterLine(){return worldDiv(min(graph.worldLevels.z-1.0,graph.worldLevels.w),graph.worldLevels.w);}
 int materialOceanY(){precise float scaled=materialWaterLine()*graph.worldLevels.w;return int(scaled);}
-int materialWaterY(vec2 world){vec4 continent=ftfUplift(world);precise float level=continentWaterHeight(continent.y,continent.z)+materialWaterLine(),scaled=level*graph.worldLevels.w;return int(scaled);}
+int materialWaterY(vec2 world){precise float level=ftfContinentWaterHeight(world)+materialWaterLine(),scaled=level*graph.worldLevels.w;return int(scaled);}
 uint materialGridCell(vec2 grid){uint n=p.meta.x;ivec2 c=clamp(ivec2(grid+.5),ivec2(0),ivec2(int(n)-1));return uint(c.y)*n+uint(c.x);}
 // Water top of block column b (grid point g) whose solid top is top: a water cell fills to its water Y (at least the ocean Y)
 // when that is above the top; any other column holds sea water up to seaLevel - 1 (the global fluid picker).
@@ -134,8 +134,8 @@ int materialRiverFill(ivec2 b,vec2 g,int top){uint i=materialGridCell(g);if(mate
     int raised=top;uint zone=(cells[i].terrain>>10)&7u;
     if(zone>=2u&&top>ocean){int table=materialWaterY(vec2(b));if(top<table)raised=table;}
     if(zone!=0u||cells[i].riverMask<1.0){const ivec2 offsets[4]=ivec2[4](ivec2(0,-1),ivec2(0,1),ivec2(1,0),ivec2(-1,0));
-        for(int k=0;k<4;++k){ivec2 nb=b+offsets[k];vec2 ng=matPoint+(vec2(nb)-matSample)*matStep;uint t=riverClassify(vec2(nb),worldDiv(materialHeightAt(ng),graph.worldLevels.w))&255u;
-            if(t==10u||t==12u)raised=max(raised,materialWaterY(vec2(nb)));}}
+        [[dont_unroll]] for(int k=0;k<4;++k){ivec2 nb=b+offsets[k];vec2 ng=matPoint+(vec2(nb)-matSample)*matStep;float rw=0.0;uint t=riverClassifyWater(vec2(nb),worldDiv(materialHeightAt(ng),graph.worldLevels.w),rw)&255u;
+            if(t==10u||t==12u){precise float scaled=rw*graph.worldLevels.w;raised=max(raised,int(scaled));}}}
     return raised;}
 // WORLD_SURFACE_WG height (top non-air block, water included) of block column b, from the height field at that block.
 int materialColumnHeight(ivec2 b){vec2 g=matPoint+(vec2(b)-matSample)*matStep;int top=int(materialHeightAt(g));int water=materialWaterTop(g,vec2(b),top);return max(materialRiverFill(b,g,top),water);}
@@ -145,7 +145,7 @@ int materialColumnHeight(ivec2 b){vec2 g=matPoint+(vec2(b)-matSample)*matStep;in
 int materialPreliminary(ivec2 b){
     uint n=p.meta.x;ivec2 c=clamp(ivec2(round(matPoint+(vec2(b)-matSample)*matStep)),ivec2(0),ivec2(int(n)-1));uint i=uint(c.y)*n+uint(c.x);
     vec4 field=imageLoad(rawField,c);vec2 world=(vec2(dvec2(c)/double(n-1))-.5)*p.domain.x+p.domain.yz;
-    double factor=mcFactor(biomeContinentalness(world,field,i),cells[i].erosion,cells[i].weirdness);
+    double factor=mcFactor(biomeContinentalness(world,field,i),cells[i].erosion,biomeWeirdness(field,i));
     double R=double(graph.worldLevels.w),scaled=double(worldDiv(field.x,graph.worldLevels.w))*R,truncated=scaled<0.0LF?ceil(scaled):floor(scaled);precise double unit=(truncated+1.0LF)/R;
     precise double offset=-1.0037500858306885LF+2.0LF*unit;
     int depth=int(graph.worldLevels.y),top=int(graph.surfaceOptions.y);double from=double(1.0+float(depth)/128.0),to=double(1.0-float(top)/128.0);
@@ -172,7 +172,7 @@ int materialPreliminary(ivec2 b){
 // at sample spacing <= 4 blocks, materialPreliminary runs once per 16-block corner instead of 4 times per column. Inspection
 // computes directly.
 int cornerBound(){return int(p.domain.x/16.0)+5;}
-bool cornerUse(){return graph.biomeSeeds2.w==3u&&p.domain.x<=4.0*float(p.meta.x-1u)&&(cornerBound()+7)/8*8<=1024;}
+bool cornerUse(){return graph.biomeSeeds2.w==3u&&p.domain.x<=8.1*float(p.meta.x-1u)&&(cornerBound()+7)/8*8<=1024;}
 ivec2 cornerOrigin(){return (ivec2(floor(p.domain.yz-p.domain.x*.5))>>4)-1;}
 int cornerLevel(ivec2 corner){
     if(!INSPECTION&&cornerUse()){ivec2 k=(corner>>4)-cornerOrigin();int b=cornerBound();if(all(greaterThanEqual(k,ivec2(0)))&&all(lessThan(k,ivec2(b))))return corners.levels[k.y*b+k.x];}
@@ -188,14 +188,15 @@ uint exactDecorate(uint top){
     for(uint d=0u;d<count;++d,at+=8u){uint kind=table.words[at],biome=table.words[at+1u];if(biome!=matRawBiome)continue;
         if(kind==1u){if(top==table.words[at+2u])top=table.words[at+3u];continue;}
         if(kind==2u){bool target=false;uint n=table.words[at+3u],list=exactProgram+table.words[at+4u];for(uint t=0u;t<n;++t)target=target||top==table.words[list+t];
-            if(target&&materialColumnHeight(matBlock+ivec2(1,0))<=matTopY+1&&materialColumnHeight(matBlock+ivec2(0,1))<=matTopY+1&&materialColumnHeight(matBlock+ivec2(0,-1))<=matTopY+1)top=table.words[at+2u];}
+            if(target){const ivec2 d3[3]=ivec2[3](ivec2(1,0),ivec2(0,1),ivec2(0,-1));bool ok=true;[[dont_unroll]] for(int k=0;k<3&&ok;++k)ok=materialColumnHeight(matBlock+d3[k])<=matTopY+1;if(ok)top=table.words[at+2u];}}
     }
     return top;
 }
 // SurfaceRules.Context.getMinSurfaceLevel: floor(lerp2 of the four corner levels) + surfaceDepth - 8.
 int materialMinSurface(){
-    ivec2 cell=matBlock>>4,corner=cell<<4;double c0=double(cornerLevel(corner)),c1=double(cornerLevel(corner+ivec2(16,0))),c2=double(cornerLevel(corner+ivec2(0,16))),c3=double(cornerLevel(corner+ivec2(16,16)));
-    double fx=double(float(matBlock.x&15)/16.0),fz=double(float(matBlock.y&15)/16.0);precise double a=c0+fx*(c1-c0),b=c2+fx*(c3-c2);precise double v=a+fz*(b-a);
+    ivec2 cell=matBlock>>4,corner=cell<<4;double cv[4];
+    for(int i=0;i<4;++i)cv[i]=double(cornerLevel(corner+ivec2((i&1)*16,(i>>1)*16)));
+    double fx=double(float(matBlock.x&15)/16.0),fz=double(float(matBlock.y&15)/16.0);precise double a=cv[0]+fx*(cv[1]-cv[0]),b=cv[2]+fx*(cv[3]-cv[2]);precise double v=a+fz*(b-a);
     return int(min(floor(v),2147483647.0LF))+matSurfaceDepth-8;
 }
 #include "mod_material_rules_generated.glsl"
@@ -204,14 +205,16 @@ uint materialAt(vec2 world,vec4 field,uint index,uint biome,float water){
     vec2 own=matPoint+(matWorld-matSample)*matStep;matHeight=materialHeightAt(own);matTopY=int(matHeight);int waterTop=materialWaterTop(own,vec2(matBlock),matTopY);matUnfilledTop=matTopY;matTopY=materialRiverFill(matBlock,own,matTopY);matWater=float(waterTop+1);
     matColumnHeight=max(matTopY,waterTop);matWaterHeight=matTopY<waterTop?waterTop+1:-2147483648;
     matBiome=canonicalBiome(biome);matRawBiome=biome;matGradient=cells[index].gateMin;
+    uint base=materialTableBase(),info=base+table.words[base+4u]+biome*4u;matBaseTemperature=uintBitsToFloat(table.words[info]);matFrozenModifier=matBiome==MATERIAL_BIOME_FROZEN_OCEAN||matBiome==MATERIAL_BIOME_DEEP_FROZEN_OCEAN;
+    if(!INSPECTION&&graph.surfaceOptions.w<=1.5&&matWaterHeight!=-2147483648&&(graph.surfaceMeta.w&1u)==0u){matFinal=materialCold(waterTop)?BLOCK_ICE:BLOCK_WATER;return matFinal;}
     exactProgram=table.words[materialTableBase()+7u];exactMode=exactProgram!=0u&&((graph.surfaceMeta.w>>1u)&7u)==1u;exactNoiseValid=uint[3](0u,0u,0u);
     if(graph.filterMeta.x==0u){float sum=0.0;for(int y=-1;y<=2;++y)for(int x=-1;x<=2;++x){if(x==0&&y==0)continue;sum+=abs(field.x-max(materialHeightAt(matPoint+vec2(x,y)*matStep),graph.worldLevels.z-1.0));}matGradient=worldDiv(sum*10.0,graph.worldLevels.w);}
     // SteepMaterialCondition: heights one block north/south, then west/east, clamped to the chunk.
     ivec2 local=matBlock&15,chunk=matBlock-local;
-    int north=materialColumnHeight(chunk+ivec2(local.x,max(local.y-1,0))),south=materialColumnHeight(chunk+ivec2(local.x,min(local.y+1,15)));
-    matSteep=south>=north+4;if(!matSteep)matSteep=materialColumnHeight(chunk+ivec2(max(local.x-1,0),local.y))>=materialColumnHeight(chunk+ivec2(min(local.x+1,15),local.y))+4;
-    matBlockSlope=max(abs(float(south-north)),0.0);
-    uint base=materialTableBase(),info=base+table.words[base+4u]+biome*4u;matBaseTemperature=uintBitsToFloat(table.words[info]);matFrozenModifier=matBiome==MATERIAL_BIOME_FROZEN_OCEAN||matBiome==MATERIAL_BIOME_DEEP_FROZEN_OCEAN;
+    ivec2 steepPts[4]=ivec2[4](chunk+ivec2(local.x,max(local.y-1,0)),chunk+ivec2(local.x,min(local.y+1,15)),chunk+ivec2(max(local.x-1,0),local.y),chunk+ivec2(min(local.x+1,15),local.y));
+    int steepH[4];[[dont_unroll]] for(int k=0;k<4;++k)steepH[k]=materialColumnHeight(steepPts[k]);
+    matSteep=steepH[1]>=steepH[0]+4||steepH[3]>=steepH[2]+4;
+    matBlockSlope=max(abs(float(steepH[1]-steepH[0])),0.0);
     matTemperature=materialTemperature(matTopY);
     materialNoises();matSurfaceDepth=materialSurfaceDepth();matSecondary=matNoise[1];matDepth=float(matSurfaceDepth);matMinSurface=materialMinSurface();
     if((graph.surfaceMeta.x&2u)!=0u)strataSetup();
@@ -253,7 +256,7 @@ uint materialDebug(int k){
     if(k>=59&&k<=67){   // preliminary surface of this sample's own grid column and its inputs (continentalness, erosion, ridges, height)
         if(k==59)return uint(materialPreliminary(ivec2(round(matSample))))&0xffffffu;
         uint i=uint(matPoint.y)*p.meta.x+uint(matPoint.x);vec4 field=imageLoad(rawField,ivec2(matPoint));vec2 world=(vec2(dvec2(matPoint)/double(p.meta.x-1u))-.5)*p.domain.x+p.domain.yz;
-        int j=(k-60)/2;float f=j==0?biomeContinentalness(world,field,i):j==1?cells[i].erosion:j==2?cells[i].weirdness:field.x;uint b=floatBitsToUint(f);return (k-60)%2==0?b&0xffffffu:b>>24;
+        int j=(k-60)/2;float f=j==0?biomeContinentalness(world,field,i):j==1?cells[i].erosion:j==2?biomeWeirdness(field,i):field.x;uint b=floatBitsToUint(f);return (k-60)%2==0?b&0xffffffu:b>>24;
     }
     int v=k==0?matTopY:k==1?matColumnHeight:k==2?matSurfaceDepth:k==3?matMinSurface:k==4?int(strataStack):k==5?int(floatBitsToUint(strataNoise)&0xffffffu):k==6?int(floatBitsToUint(strataNoise)>>24):k==7?int(matBiome):k==8?matPreScree:k==9?(matSteep?1:0)|(matWaterHeight==-2147483648?0:2):
         k>=68&&k<=71?int(strataAt(matTopY-(k==68?0:k==69?5:k==70?20:60))):k==72?int(matFinal)|(matVolcano?0x800000:0):
@@ -261,7 +264,7 @@ uint materialDebug(int k){
         k==55?matBlock.x:k==56?matBlock.y:k==57?int(floatBitsToUint(matTemperature)&0xffffffu):k==58?int(floatBitsToUint(matTemperature)>>24):0;
     return uint(v)&0xffffffu;
 }
-vec3 materialColor(uint block,uint biome,vec2 world){uvec4 data=materialData(block);vec3 color=unpackRgb(data.x);uint offset=table.words[4]+biome*4u;
+vec3 materialColor(uint block,uint biome,vec2 world){uvec4 data=materialData(block);vec3 color=unpackRgb(data.x);uint offset=biomeColorOffset(biome);
     if(data.y==1u){uint rgb=table.words[offset+1u];if(swampBiome(biome))rgb=biomeInfoNoise(dvec2(floor(world))*.0225LF)<-.1LF?5011004u:6975545u;color*=unpackRgb(rgb);}else if(data.y==2u)color*=unpackRgb(table.words[offset+2u]);else if(data.y==3u)color*=unpackRgb(table.words[offset+3u]);else if(data.y==4u)color*=unpackRgb(0x80a755u);else if(data.y==5u)color*=unpackRgb(0x619961u);
     return color;
 }

@@ -1,0 +1,13 @@
+{
+  "where": {
+    "biomes": ["minecraft:savanna", "minecraft:savanna_plateau", "minecraft:windswept_savanna"],
+    "tags": ["c:is_savanna"]
+  },
+  "rapids": ["minecraft:gravel*4", "minecraft:cobblestone", "minecraft:sandstone"],
+  "silt": ["minecraft:sand*4", "minecraft:gravel", "minecraft:clay"],
+  "shore": ["keep*5", "minecraft:sand*2", "minecraft:gravel"],
+  "bars": ["minecraft:sand*3", "minecraft:gravel"],
+  "flats": ["minecraft:sand*2", "keep*2"],
+  "patch_size": 6,
+  "shore_height": 1
+}

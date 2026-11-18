@@ -26,7 +26,12 @@
       "continentSizeVariance",
       "continentNoiseOctaves",
       "continentNoiseGain",
-      "continentNoiseLacunarity"
+      "continentNoiseLacunarity",
+      "bridgeChance",
+      "tectonicPlateUplift",
+      "tectonicRounding",
+      "macroWarpStrength",
+      "coastalComplexity"
     ],
     "/world/controlPoints": [
       "islandInland",
@@ -219,6 +224,7 @@
     ],
     "/miscellaneous": [
       "smoothLayerDecorator",
+      "snowCoversSmallPlants",
       "strataRegionSize",
       "strataDecorator",
       "oreCompatibleStoneOnly",
@@ -233,6 +239,10 @@
     ]
   },
   "ranges": {
+    "/caves/cheeseCaveDepthOffset": [
+      0.0,
+      1.5
+    ],
     "/world/continent/continentScale": [
       100,
       10000
@@ -244,6 +254,26 @@
     "/world/continent/continentNoiseLacunarity": [
       1,
       10
+    ],
+    "/world/continent/bridgeChance": [
+      0.0,
+      1.0
+    ],
+    "/world/continent/tectonicPlateUplift": [
+      0.0,
+      1.0
+    ],
+    "/world/continent/tectonicRounding": [
+      0.0,
+      1.0
+    ],
+    "/world/continent/macroWarpStrength": [
+      0.0,
+      2.0
+    ],
+    "/world/continent/coastalComplexity": [
+      0.0,
+      1.0
     ],
     "/world/properties/worldHeight": [
       16,

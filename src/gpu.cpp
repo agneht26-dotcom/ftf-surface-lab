@@ -17,7 +17,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugMessage(VkDebugUtilsMessageSeverityFl
     if(severity>=VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)++static_cast<Gpu*>(data)->validationErrors;
     std::fprintf(stderr,"Vulkan diagnostic: %s\n",info->pMessage);return VK_FALSE;
 }
-void Gpu::initialize(GLFWwindow* nativeWindow) {
+void Gpu::initialize(GLFWwindow* nativeWindow, bool allowFloat64) {
     window=nativeWindow;vkCheck(volkInitialize());
     std::array<wchar_t,32768> executable{};
     if(!GetModuleFileNameW(nullptr,executable.data(),static_cast<DWORD>(executable.size())))throw std::runtime_error("Cannot locate application shaders");
@@ -66,8 +66,10 @@ void Gpu::initialize(GLFWwindow* nativeWindow) {
     VkDeviceCreateInfo dc{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
     dc.queueCreateInfoCount=1;dc.pQueueCreateInfos=&qc;dc.enabledExtensionCount=static_cast<uint32_t>(deviceExtensions.size());dc.ppEnabledExtensionNames=deviceExtensions.data();
     VkPhysicalDeviceFeatures supported{};vkGetPhysicalDeviceFeatures(physical,&supported);
-    if(!supported.shaderFloat64||!supported.shaderInt64)throw std::runtime_error("This NVIDIA prototype requires shaderFloat64 and shaderInt64 for validated coordinates and hydrology");
-    VkPhysicalDeviceFeatures enabled{};enabled.shaderFloat64=VK_TRUE;enabled.shaderInt64=VK_TRUE;dc.pEnabledFeatures=&enabled;
+    if(!supported.shaderInt64)throw std::runtime_error("This GPU lacks shaderInt64 required for biome and hydrology hashing");
+    deviceSupportsFloat64=(supported.shaderFloat64==VK_TRUE);
+    hasFloat64=allowFloat64&&deviceSupportsFloat64;
+    VkPhysicalDeviceFeatures enabled{};enabled.shaderFloat64=hasFloat64?VK_TRUE:VK_FALSE;enabled.shaderInt64=VK_TRUE;dc.pEnabledFeatures=&enabled;
     vkCheck(vkCreateDevice(physical,&dc,nullptr,&device));volkLoadDevice(device);vkGetDeviceQueue(device,queueFamily,0,&queue);
     VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,64},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,384},{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,64},{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,256}};
     VkDescriptorPoolCreateInfo pc{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};pc.flags=VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
@@ -75,7 +77,7 @@ void Gpu::initialize(GLFWwindow* nativeWindow) {
     VkCommandPoolCreateInfo cp{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};cp.queueFamilyIndex=queueFamily;cp.flags=VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
     vkCheck(vkCreateCommandPool(device,&cp,nullptr,&utilities));
     // Persisted pipeline cache: survives a cleared or full driver shader cache, so only changed shaders recompile.
-    pipelineCachePath=shaderRoot.parent_path()/"state"/"pipeline-cache.bin";
+    pipelineCachePath=shaderRoot.parent_path()/"state"/(hasFloat64?"pipeline-cache.bin":"pipeline-cache-fp32.bin");
     {std::vector<char> blob;std::ifstream cacheIn(pipelineCachePath,std::ios::binary|std::ios::ate);if(cacheIn){auto bytes=static_cast<size_t>(cacheIn.tellg());if(bytes>32&&bytes<(1ull<<30)){blob.resize(bytes);cacheIn.seekg(0);cacheIn.read(blob.data(),bytes);if(!cacheIn)blob.clear();}}
      VkPipelineCacheCreateInfo cc{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};cc.initialDataSize=blob.size();cc.pInitialData=blob.empty()?nullptr:blob.data();
      if(vkCreatePipelineCache(device,&cc,nullptr,&pipelineCache)!=VK_SUCCESS){cc.initialDataSize=0;cc.pInitialData=nullptr;vkCheck(vkCreatePipelineCache(device,&cc,nullptr,&pipelineCache));}}
@@ -84,7 +86,7 @@ void Gpu::initialize(GLFWwindow* nativeWindow) {
     const VkPresentModeKHR modes[]={VK_PRESENT_MODE_MAILBOX_KHR,VK_PRESENT_MODE_FIFO_KHR};
     swap.PresentMode=ImGui_ImplVulkanH_SelectPresentMode(physical,swap.Surface,modes,2);
     int width{},height{};glfwGetFramebufferSize(window,&width,&height);resizeSwapchain(width,height);
-    std::printf("GPU: %s | timestamp period %.3f ns | validation %s\n",properties.deviceName,properties.limits.timestampPeriod,validationActive?"on":"unavailable");
+    std::printf("GPU: %s | timestamp period %.3f ns | fp64 %s | validation %s\n",properties.deviceName,properties.limits.timestampPeriod,hasFloat64?"on":"fallback(fp32)",validationActive?"on":"unavailable");
 }
 void Gpu::initializeGui(){
     ImGui_ImplGlfw_InitForVulkan(window,true);ImGui_ImplVulkan_InitInfo ii{};
@@ -171,7 +173,7 @@ void Gpu::immediate(const std::function<void(VkCommandBuffer)>& record){
     vkCheck(vkWaitForFences(device,1,&fence,VK_TRUE,UINT64_MAX));vkDestroyFence(device,fence,nullptr);vkFreeCommandBuffers(device,utilities,1,&cmd);
 }
 VkShaderModule Gpu::shader(const std::filesystem::path& file){
-    auto resolved=shaderRoot/file;
+    auto resolved=hasFloat64?(shaderRoot/file):(shaderRoot/"fp32"/file);
     std::ifstream in(resolved,std::ios::binary|std::ios::ate);if(!in)throw std::runtime_error("Shader missing: "+resolved.string());
     auto size=static_cast<size_t>(in.tellg());std::vector<uint32_t> words((size+3)/4);in.seekg(0);in.read(reinterpret_cast<char*>(words.data()),size);
     VkShaderModuleCreateInfo ci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};ci.codeSize=size;ci.pCode=words.data();VkShaderModule module{};vkCheck(vkCreateShaderModule(device,&ci,nullptr,&module));return module;

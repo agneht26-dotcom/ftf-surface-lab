@@ -1,0 +1,12 @@
+{
+  "where": {
+    "biomes": ["minecraft:dripstone_caves"]
+  },
+  "rapids": ["minecraft:gravel*3", "minecraft:dripstone_block*2", "minecraft:cobblestone"],
+  "silt": ["minecraft:gravel*2", "minecraft:clay", "minecraft:dripstone_block"],
+  "shore": ["keep*3", "minecraft:dripstone_block*2", "minecraft:gravel"],
+  "bars": ["minecraft:gravel*2", "minecraft:dripstone_block"],
+  "flats": ["minecraft:gravel"],
+  "patch_size": 4,
+  "shore_height": 1
+}

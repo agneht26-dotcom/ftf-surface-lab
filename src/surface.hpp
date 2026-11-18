@@ -2,10 +2,17 @@
 #include <map>
 #include <string>
 #include <optional>
+#include <atomic>
+#include <mutex>
+#include <thread>
 #include "gpu.hpp"
 #include <glm/glm.hpp>
 #include <array>
 #include <functional>
+#include <memory>
+#include <unordered_map>
+#include "dynamic_waters_config.hpp"
+#include "dynamic_waters_hydrology.hpp"
 
 struct alignas(16) TerrainParams {
     glm::uvec4 meta{256,12345,0,0};
@@ -59,16 +66,28 @@ struct alignas(16) GraphSeeds {
     std::array<uint32_t,256> simplexPerms{};      // TEMPERATURE_NOISE (1234), FROZEN_TEMPERATURE_NOISE (3456) levels 0, 1, 2: 256 bytes each
     std::array<uint32_t,96*70> improvedNoises{};  // ImprovedNoise: xo, yo, zo doubles then the 256-byte permutation, in generated noise order
     glm::uvec4 regionSalts{0};   // FTF region rendezvous salts (lo, hi): the weighted region provider seed ^ 0x5D6F7A2C8B9134E1, the replacement layer seed ^ 0x61C8E4A2793DB50F
+    glm::vec4 climateErosion0{0},climateErosion1{0};   // climateFixes2 (1.0.0025+): erosion scale, falloff, min, max; bias, distributionBias, 0, 0
+    glm::uvec4 climateExtraSeeds{0};                 // erosionSeed+0, +1, +2, tempType|(moistType<<8)|(erosionType<<16)
+    glm::vec4 upliftExtra{0};                        // 1.0.0025+: macroWarpStrength, coastalComplexity, bridgeChance, tectonicPlateUplift
+    glm::vec4 upliftExtra2{0};                       // 1.0.0025+: tectonicRounding, saddleHeight (0.75), 0, 0
+    glm::uvec4 upliftSeeds{0};                       // 1.0.0025+: bridgeSeed (root+12), tectonicSeed (root+13), 0, 0
     GraphSeeds(){familyScales.fill(glm::vec4(0));choices.fill(glm::uvec4(0));mountainScales.fill(glm::vec4(0));}
 };
-static_assert(sizeof(GraphSeeds)==47760);   // stays below vkCmdUpdateBuffer's 65536-byte limit
+static_assert(sizeof(GraphSeeds)==47856);   // stays below vkCmdUpdateBuffer's 65536-byte limit
 static_assert(sizeof(TerrainSample)==32);
-// One Minecraft NormalNoise of an exact mod surface rule (assets/mod-exact-surface-rules.json, normal edition only).
+// Exact mod surface noise descriptor (empty in the shareable edition).
 struct ExactNoiseSpec {std::string name;int firstOctave=0;std::vector<double> amplitudes;};
 constexpr size_t exactNoiseCapacity=32+1024*70;
 constexpr size_t cornerCapacity=1u<<20;   // ints: binding 17, preliminary surface levels per 16-block corner (biomes.comp CORNER_CAPACITY)   // words: 8 gradient factories, then up to 1024 ImprovedNoise tables
 struct alignas(16) SurfaceInspection {glm::uvec4 request{};glm::vec4 values{};glm::uvec4 ids{};glm::vec4 extra{};};
 static_assert(sizeof(SurfaceInspection)==64);
+struct VoronoiBufferKey {
+    bool active{};
+    int32_t baseX{},baseZ{},gridW{},gridH{};
+    glm::uvec4 worldSeeds0{},upliftSeeds{};
+    glm::vec4 continent{},upliftExtra{},upliftExtra2{};
+    bool operator==(const VoronoiBufferKey&)const=default;
+};
 #include "generation_state.hpp"
 struct alignas(16) GenerationCacheHeader {glm::ivec4 bounds[2]{};glm::uvec4 info{};};
 struct EffectsBlock {glm::vec4 effects,screen,viewport,sun,shadow;glm::uvec4 terrain;glm::vec4 cue,hole,water,fog,cloud,cloud2;}; // ViewEffects SSBO; the first 128 bytes are what terrain shaders read
@@ -76,7 +95,7 @@ static_assert(sizeof(EffectsBlock)==192);
 struct StageTiming { double generate{},filter{},draw{},total{},cache{},world{},ocean{},compose{};bool valid{},generated{}; };
 struct SurfaceFrame {
     Image color,depth,scene; // scene: shaded terrain before the atmosphere sub-pass writes `color`
-    VkDescriptorSet texture{},inputs{};
+    VkDescriptorSet texture{},inputs{},taaSet{};
     VkFramebuffer framebuffer{};
     VkQueryPool queries{},stepQueries{}; // stepQueries: per-dispatch timestamps when Surface::profileSteps is on
     std::vector<std::string> stepNames;
@@ -85,9 +104,53 @@ struct SurfaceFrame {
     bool generated{};
     uint32_t workStage=0,workTiles=0;
 };
+
+struct DynamicWatersSample {
+    bool active = false;
+    bool modifies = false;
+    bool isMainRiverWater = false;
+    bool isMountainRiver = false;
+    bool isLake = false;
+    bool isWatershedWall = false;
+    bool isIceSurface = false;
+    bool overrideRiverBiome = false;
+    bool riverBiomeIsFrozen = false;
+    int origY = 63;
+    int finalSolidY = 63;
+    int waterTopY = 0;
+    double flowX = 0.0;
+    double flowZ = 0.0;
+    std::string surfaceBlockName;
+    std::string aboveWaterBlockName;
+};
+
+struct CpuCellState {
+    float riverMask;
+    float sediment;
+    uint32_t terrain;
+    float waterHeight;
+    float gateMin;
+    float erosion;
+    float weirdness;
+    uint32_t biome;
+};
+static_assert(sizeof(CpuCellState) == 32, "CpuCellState must match shaders/cell_state.glsl");
+
+struct DwBiomeEntry {
+    std::string name;
+    uint32_t mapColor = 0x7cbd6bu;
+    uint32_t grassColor = 0x7cbd6bu;
+    uint32_t foliageColor = 0x59ae30u;
+    uint32_t waterColor = 0x3f76e4u;
+    float temperature = 0.5f;
+    float downfall = 0.5f;
+    uint32_t tags = 0;
+};
+
 class Surface {
 public:
     explicit Surface(Gpu& device):gpu(device){}
+    ~Surface(){waitForDwAsync(true);}
     Gpu& gpu;
     std::vector<SurfaceFrame> frames;
     uint32_t resolution{},width{},height{};
@@ -111,9 +174,11 @@ public:
     // Render-only atmosphere (second sub-pass): realistic water, height fog, volumetric clouds. All zero = exact copy of the scene.
     struct Atmosphere {glm::vec4 water{},fog{},cloud{},cloud2{};glm::mat4 inverseVP{1};glm::vec4 eye{},domain{},clip{};}; // inverseVP is camera-relative; clip: near, far
     Atmosphere atmosphere;
+    struct TaaState {bool enabled=false;glm::mat4 invCurrVP{1},prevVP{1};glm::vec2 originDelta{0},jitterUv{0};bool reset=true;float alpha=0.08f,sharpness=0.5f;} taa;
     glm::vec4 scaleCue{}; // camera x,y,z (absolute world) and strength of the 1-block / 16-block scale grid
     glm::vec4 effects{1,.34f,0,1}; // AO intensity, shadow intensity, elapsed seconds, shadow speed
     bool updateRivers(const std::vector<uint32_t>& data);
+    bool updateVoronoi(const TerrainParams& params,const GraphSeeds& seeds);
     static VkDeviceSize estimatedFieldBytes(uint32_t n){return static_cast<VkDeviceSize>(n)*n*72;}
     void initialize(Surface* shared=nullptr,std::function<void(uint32_t,uint32_t)> progress={},bool allVariants=false);
     void ensure(uint32_t grid,uint32_t w,uint32_t h);
@@ -133,29 +198,110 @@ public:
 
     std::vector<float> pickHeights(uint32_t side=129);
     std::vector<float> heightField(); // whole grid, row-major, raw FTF heights (one copy, waits for the GPU)
+    std::vector<uint32_t> readBiomes(); // whole grid, row-major, raw biome ids from cellState (one copy, waits for the GPU)
     // Several full-resolution windows of the height field in one copy (waits for the GPU): origin.xy and size.zw per window, row-major results.
     std::vector<std::vector<float>> heightWindows(const std::vector<glm::ivec4>& windows);
     // Asynchronous variant: record a copy of the height field into this frame's staging buffer; read it back when that
     // frame slot comes round again (its fence has signalled), without ever stalling the queue.
     void recordHeightCopy(VkCommandBuffer cmd,uint32_t frame,const TerrainParams& params,uint64_t revision,glm::ivec2 offset={0,0},uint32_t side=0); // side>0: copy only a side x side window starting at offset
     bool collectHeights(uint32_t frame,std::vector<float>& heights,TerrainParams& params,uint64_t& revision);
+    void recordPickHeights(VkCommandBuffer cmd,uint32_t frame,uint64_t revision,uint32_t side=129);
+    bool collectPickHeights(uint32_t frame,std::vector<float>& heights,uint64_t& revision);
     std::vector<TerrainSample> samples(uint32_t frame);
     void exportCells(const std::filesystem::path& file,bool extended=false);
     void screenshot(uint32_t frame,const std::filesystem::path& file);
     void destroy();
+
+    dw::DynamicWatersConfig dwConfig{};
+    int64_t dwWorldSeed = 0;
+    bool dwPending = false;
+    GraphSeeds dwLastSeeds{};
+    std::vector<glm::vec4> dwOrigRawField;
+    std::vector<glm::vec4> dwOrigField;
+    std::vector<uint32_t> dwOrigColors;
+    std::vector<CpuCellState> dwOrigCells;
+    TerrainParams dwOrigParams{};
+    uint64_t dwOrigRevision = 0;
+    std::vector<DwBiomeEntry> dwBiomes;
+    mutable std::vector<uint8_t> dwBiomeOceanOrBlacklisted;
+    mutable std::string dwBiomeBlacklistCached;
+    mutable size_t dwBiomeCountCached = 0;
+    std::unordered_map<std::string, uint32_t> dwBlockIds;
+    uint32_t dwRiverBiomeId = 31;
+    uint32_t dwFrozenRiverBiomeId = 17;
+    mutable std::unique_ptr<dw::HydrologyEngine> dwEngine;
+    uint64_t dwEngineHash = 0;
+    int64_t dwEngineSeed = 0;
+    uint64_t dwEngineBaseRev = 0;
+    int dwEngineSeaLevel = 63;
+    uint32_t dwEngineRes = 0;
+    mutable const Surface* dwDetailSample = nullptr;
+    mutable std::mutex dwEngineUseMutex;
+    std::atomic<bool> dwCancelRequested{false};
+    glm::vec2 dwFocusCenter{0.0f, 0.0f};
+    bool dwHasFocus = false;
+    int dwPreviewRadius = 4096;
+    bool dwPinnedFocus = false;
+    glm::vec2 dwAppliedFocus{0.0f, 0.0f};
+    bool dwHasAppliedFocus = false;
+    int dwAppliedRadius = 0;
+    bool dwAppliedPinned = false;
+    bool dwPreviouslyCarved = false;
+
+    struct DwAsyncJob {
+        std::thread thread;
+        std::atomic<bool> done{false};
+        bool running = false;
+        uint64_t expectedRev = 0;
+        uint32_t res = 0;
+        TerrainParams params{};
+        dw::DynamicWatersConfig cfgSnapshot{};
+        int64_t worldSeed = 0;
+        uint64_t cfgHash = 0;
+        int seaY = 63;
+        GraphSeeds seedsSnapshot{};
+        glm::vec4 holeSnapshot{};
+        glm::vec2 appliedFocus{0.0f, 0.0f};
+        int appliedRadius = 0;
+        bool appliedPinned = false;
+        bool hasCarved = false;
+        std::vector<glm::vec4> rawVec;
+        std::vector<glm::vec4> fieldVec;
+        std::vector<uint32_t> colorVec;
+        std::vector<CpuCellState> cellVec;
+    };
+    std::unique_ptr<DwAsyncJob> dwAsync;
+
+    void configureDynamicWaters(const dw::DynamicWatersConfig& cfg, int64_t worldSeed, glm::vec2 focusCenter = {0.0f, 0.0f}, bool hasFocus = false, int previewRadius = 4096, bool pinnedFocus = false);
+    const dw::DynamicWatersConfig& dynamicWatersConfig() const { return dwConfig; }
+    bool dwAsyncBusy() const { return dwAsync && dwAsync->running; }
+    void waitForDwAsync(bool cancel = false);
+    bool startDynamicWatersAsync();
+    bool pollDynamicWatersAsync();
+    bool advanceDynamicWatersAsync();
+    bool finishPendingDynamicWaters();
+    void applyDynamicWatersCpuPass();
+    void rebindDynamicWatersCallbacks();
+    DynamicWatersSample inspectDynamicWaters(int wx, int wz) const;
 private:
+    bool prepareDwJob(DwAsyncJob& job);
+    void executeDwJob(DwAsyncJob& job);
+    bool uploadDwJob(const DwAsyncJob& job);
     struct AsyncHeights {Buffer staging;uint32_t resolution=0;bool pending=false;TerrainParams params{};uint64_t revision=0;};
-    std::vector<AsyncHeights> asyncHeights;
+    std::vector<AsyncHeights> asyncHeights,asyncPickHeights;
     bool sharedPipelines=false;Surface* pipelineOwner=nullptr;
     void buildCompute(VkShaderModule module,VkPipeline& pipeline,int variant,bool filterStage);
     VkPipeline variantPipeline(uint32_t variant);
-    Buffer indices,graphSeeds,mountainCache,cellState,regionCells,riverNetworks,biomeTable,effectsBuffer,inspectionBuffer,sinTable;
-    std::vector<uint32_t> riverWords;
+    VkPipeline inspectionPipeline();
+    VkPipeline cornersPipeline();
+    Buffer indices,graphSeeds,mountainCache,cellState,regionCells,riverNetworks,voronoiCells,biomeTable,effectsBuffer,inspectionBuffer,sinTable;
+    std::vector<uint32_t> riverWords,voronoiWords;
+    VoronoiBufferKey voronoiKey{};
     Buffer exactNoise;std::vector<ExactNoiseSpec> exactNoiseSpecs;std::vector<std::string> exactGradients;glm::uvec4 exactNoiseKey{0};bool exactNoiseValid=false;Buffer cornerLevels;   // binding 17: corner pre-pass output; binding 16: seeded tables of the exact mod surface rule
-    Image rawField,field,colors;
+    Image rawField,field,colors,taaHistory,taaOutput;
     VkDescriptorSet fields{};
     VkDescriptorSetLayout layout{};
-    VkPipelineLayout computeLayout{},drawLayout{},atmosphereLayout{};VkPipeline atmospherePipeline{};VkDescriptorSetLayout inputLayout{};
+    VkPipelineLayout computeLayout{},drawLayout{},atmosphereLayout{},taaLayout{};VkPipeline atmospherePipeline{},taaPipeline{};VkDescriptorSetLayout inputLayout{},taaSetLayout{};
     std::array<VkPipeline,16> generate{};
     std::array<VkPipeline,9> worldFilters{};
     VkPipeline filter{},drawPipeline{},drawPipelineCulled{},buildMountainCache{},buildMountainSegments{},buildWorldMap{},buildOceanFloor{},buildIslandSurface{},buildClimate{},buildRivers{},buildBiomes{},buildRecolor{},buildInspection{},buildCorners{};

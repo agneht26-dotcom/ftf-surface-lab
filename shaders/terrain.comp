@@ -66,7 +66,7 @@ void main() {
     float small=fbm(x*7.0,p.meta.y+1337u,3,.5);
     h=p.land.z+p.land.x*(continents*p.land.w+hills*.36+ridges*mountainMask*p.detail.x+small*p.detail.y-.15);
     }
-    if(GENERATOR==5u){uint index=q.y*n+q.x;cells[index].erosion=terrainBiome.x;cells[index].weirdness=terrainBiome.y;cells[index].biome=0u;imageStore(rawField,ivec2(q),vec4(h,mixed.y,0,0));imageStore(colors,ivec2(q),vec4(0,0,0,mixed.z/255.0));return;}
+    if(GENERATOR==5u){uint index=q.y*n+q.x;cells[index].erosion=graph.filterMeta2.x>=2u?0.0:terrainBiome.x;cells[index].weirdness=terrainBiome.y;cells[index].biome=0u;imageStore(rawField,ivec2(q),vec4(h,mixed.y,0,0));imageStore(colors,ivec2(q),vec4(0,0,0,mixed.z/255.0));return;}
     float temperature=clamp(.55+fbm(world/max(p.climate.z,1.0),p.meta.y+901u,3,.5)*.9+p.climate.x-max(0,h-p.land.z)*.00065,0,1);
     float moisture=clamp(.5+fbm(world/max(p.climate.z,1.0),p.meta.y+1901u,3,.5)*1.1+p.climate.y,0,1);
     // Development climate palette, explicitly not verified FTF biome IDs.

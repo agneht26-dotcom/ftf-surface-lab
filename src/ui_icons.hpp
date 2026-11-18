@@ -4,7 +4,8 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
-enum class ToolIcon {Navigate,Detail,Center,Settings,Spawn,Measure,LOD,Pin,Fly,Walk,Copy};
+#include <type_traits>
+enum class ToolIcon {Navigate,Detail,Center,Settings,Spawn,Measure,LOD,Pin,Fly,Walk,Copy,DynamicWater};
 inline bool toolIconButton(const char* id,ToolIcon icon,bool selected){
  if(selected)ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(.12f,.48f,.40f,1));bool clicked=ImGui::Button(id,{40,30});if(selected)ImGui::PopStyleColor();
  auto a=ImGui::GetItemRectMin();ImVec2 c{a.x+20,a.y+15};auto* d=ImGui::GetWindowDrawList();auto ink=ImGui::GetColorU32(ImGuiCol_Text);
@@ -20,6 +21,7 @@ inline bool toolIconButton(const char* id,ToolIcon icon,bool selected){
  if(icon==ToolIcon::Copy){d->AddRect({c.x-9,c.y-6},{c.x+3,c.y+9},ink,2,0,1.6f);d->AddRect({c.x-4,c.y-11},{c.x+8,c.y+4},ink,2,0,1.6f);}
  if(icon==ToolIcon::LOD){for(int i=0;i<3;++i){float r=3.0f+i*3;d->AddRect({c.x-r,c.y-r},{c.x+r,c.y+r},ink,1,0,1.4f);}line(-9,0,9,0);line(0,-9,0,9);}
  if(icon==ToolIcon::Settings){d->AddCircle(c,6,ink,24,1.8f);d->AddCircle(c,2,ink,16,1.4f);for(int i=0;i<8;++i){float t=i*6.2831853f/8;line(std::cos(t)*7,std::sin(t)*7,std::cos(t)*10,std::sin(t)*10);}}
+ if(icon==ToolIcon::DynamicWater){d->AddCircle(c,8.5f,ink,24,1.5f);line(-6,2,6,2);line(-4,5.5f,4,5.5f);d->AddTriangle({c.x,c.y-8.0f},{c.x-4.2f,c.y-1.0f},{c.x+4.2f,c.y-1.0f},ink,1.5f);d->AddCircleFilled({c.x,c.y-1.5f},2.0f,ink);}
  return clicked;
 }
 
@@ -46,25 +48,84 @@ inline const char* terrainTypeName(int id){const char* families[]={"Plains","Ste
 
 // Compact vector icons stay crisp at every UI scale; stable labels preserve ImGui IDs.
 inline void sectionIconAt(ImVec2 a,const char* title){
- std::string key=title;auto has=[&](const char* word){return key.find(word)!=std::string::npos;};int family=106;
+ std::string key=title;auto has=[&](const char* word){return key.find(word)!=std::string::npos;};
+ auto* d=ImGui::GetWindowDrawList();auto ink=ImGui::GetColorU32(ImGuiCol_Text);
+ auto line=[&](float x,float y,float xx,float yy,float w=1.5f){d->AddLine({a.x+x,a.y+y},{a.x+xx,a.y+yy},ink,w);};
+ ImVec2 c{a.x+9.5f,a.y+9.5f};
+
+ if(has("Vanilla structures")||has("structures")){
+  // House / turret silhouette
+  ImVec2 roof[3]={{a.x+9.5f,a.y+2},{a.x+17,a.y+8.5f},{a.x+2,a.y+8.5f}};
+  d->AddTriangle(roof[0],roof[1],roof[2],ink,1.5f);
+  d->AddRect({a.x+4,a.y+8.5f},{a.x+15,a.y+17},ink,0,0,1.5f);
+  d->AddRectFilled({a.x+8,a.y+12},{a.x+11,a.y+17},ink);
+  return;
+ }
+ if(has("Mod support")){
+  // Gear / wrench mod icon
+  d->AddCircle(c,5.0f,ink,16,1.6f);
+  d->AddCircleFilled(c,1.8f,ink);
+  for(int i=0;i<6;++i){float t=i*6.2831853f/6.0f;line(9.5f+std::cos(t)*5.2f,9.5f+std::sin(t)*5.2f,9.5f+std::cos(t)*8.0f,9.5f+std::sin(t)*8.0f,1.6f);}
+  return;
+ }
+ if(has("Supported biome")){
+  // Leaf / sapling icon
+  d->AddEllipse(c,{6.0f,4.0f},ink,-0.6f,16,1.5f);
+  line(4,15,14,5,1.4f);
+  return;
+ }
+ if(has("Biomes generated")){
+  // Bar / census chart
+  d->AddRect({a.x+2,a.y+10},{a.x+6,a.y+17},ink,0,0,1.4f);
+  d->AddRect({a.x+7.5f,a.y+4},{a.x+11.5f,a.y+17},ink,0,0,1.4f);
+  d->AddRect({a.x+13,a.y+7},{a.x+17,a.y+17},ink,0,0,1.4f);
+  return;
+ }
+ if(has("Height limit")){
+  // Ceiling bar over mountain peak
+  line(2,3,17,3,1.8f);
+  line(2,16,9.5f,6,1.5f);line(9.5f,6,17,16,1.5f);
+  return;
+ }
+ if(has("Points")){
+  // Map pin
+  d->AddCircle({a.x+9.5f,a.y+7.0f},4.5f,ink,16,1.5f);
+  line(5.6f,9.5f,9.5f,17.0f,1.5f);line(13.4f,9.5f,9.5f,17.0f,1.5f);
+  return;
+ }
+ if(has("Walk")){
+  // Walking person
+  d->AddCircleFilled({a.x+9.5f,a.y+4.0f},2.2f,ink);
+  line(9.5f,6.5f,9.5f,11.5f);line(9.5f,8.0f,5.5f,10.5f);line(9.5f,8.0f,13.5f,10.5f);
+  line(9.5f,11.5f,6.5f,17.0f);line(9.5f,11.5f,12.5f,17.0f);
+  return;
+ }
+ if(has("Selected tool")){
+  // Target / tool crosshair
+  d->AddCircle(c,5.5f,ink,16,1.5f);d->AddCircleFilled(c,1.6f,ink);
+  line(2,9.5f,5,9.5f);line(14,9.5f,17,9.5f);line(9.5f,2,9.5f,5);line(9.5f,14,9.5f,17);
+  return;
+ }
+
+ int family=106;
  if(has("River")||has("river"))family=110;
  else if(has("Climate")||has("Biome")||has("biome"))family=111;
  else if(has("Island"))family=107;
  else if(has("Terrain")||has("terrain")||has("Height"))family=9;
  else if(has("Erosion")||has("Scree")||has("scree")||has("Surface"))family=6;
  else if(has("Underground"))family=112;
- else if(has("Walk")||has("Points")||has("tool"))family=108;
  if(has("World")||has("history")||has("version")||has("Generator")||has("Resolution")||has("View")||has("Preset")){
-  ImVec2 c{a.x+9.5f,a.y+9.5f};auto* d=ImGui::GetWindowDrawList();auto ink=ImGui::GetColorU32(ImGuiCol_Text);
   if(has("Generator")||has("Resolution")||has("View")){d->AddRect({a.x+2,a.y+2},{a.x+17,a.y+17},ink,1,0,1.5f);for(int k=7;k<=12;k+=5){d->AddLine({a.x+k,a.y+2},{a.x+k,a.y+17},ink);d->AddLine({a.x+2,a.y+k},{a.x+17,a.y+k},ink);}}
   else if(has("Preset")){d->AddRect({a.x+4,a.y+2},{a.x+15,a.y+17},ink,1.5f,0,1.5f);for(float y:{7.0f,10.5f,14.0f})d->AddLine({a.x+7,a.y+y},{a.x+12,a.y+y},ink,1.2f);}
   else{d->AddCircle(c,7,ink,24,1.5f);if(has("World")){d->AddEllipse(c,{3.5f,7},ink,0,24,1.2f);d->AddLine({a.x+2,a.y+9.5f},{a.x+17,a.y+9.5f},ink,1.2f);}else{d->AddLine(c,{c.x,c.y-5},ink,1.5f);d->AddLine(c,{c.x+4,c.y+2},ink,1.5f);}}
  }else terrainTypeIconAt(a,family);
 }
 // Colour coding: every section header carries the colour of its category (terrain green, climate/biome teal, rivers blue,
-// islands sand, erosion/surface rust, world/quality violet, walk/points rose) so long panels scan at a glance.
+// islands sand, erosion/surface rust, world/quality violet, walk/points rose, structures amber, mod support cyan-indigo) so long panels scan at a glance.
 inline ImVec4 sectionAccent(const char* title){
  std::string key=title;auto has=[&](const char* word){return key.find(word)!=std::string::npos;};
+ if(has("Vanilla structures")||has("structures"))return {.90f,.68f,.24f,1};
+ if(has("Mod support"))return {.28f,.68f,.92f,1};
  if(has("River")||has("river"))return {.20f,.52f,.90f,1};
  if(has("Climate")||has("Biome")||has("biome")||has("Temperature")||has("Moisture"))return {.10f,.72f,.70f,1};
  if(has("Island"))return {.86f,.70f,.32f,1};
@@ -103,13 +164,59 @@ inline void labelLine(const char* label){const char* end=ImGui::FindRenderedText
 inline std::string labelAbove(const char* label,float width=-1){labelLine(label);ImGui::SetNextItemWidth(width);return std::string("##")+label;}
 inline bool valueSlider(const char* label,float& value,float low,float high,const char* format="%.2f",ImGuiSliderFlags flags=0,bool clampTyped=true,float width=0){
  ImGui::PushID(label);ImGui::BeginGroup();labelLine(label);bool changed=false;float spacing=ImGui::GetStyle().ItemSpacing.x,row=width>0?width:ImGui::GetContentRegionAvail().x;
- ImGui::SetNextItemWidth(std::max(40.0f,row-valueBoxWidth-spacing));float slider=value;if(ImGui::SliderFloat("##slider",&slider,low,high,"",flags|ImGuiSliderFlags_NoInput)){value=slider;changed=true;}
- ImGui::SameLine();ImGui::SetNextItemWidth(valueBoxWidth);float typed=value;if(ImGui::InputFloat("##number",&typed,0,0,format)&&std::isfinite(typed)){value=clampTyped?std::clamp(typed,std::min(low,high),std::max(low,high)):typed;changed=true;}
+ float boxW=std::min(valueBoxWidth,std::max(54.0f,row*0.42f));
+ ImGui::SetNextItemWidth(std::max(40.0f,row-boxW-spacing));float slider=value;if(ImGui::SliderFloat("##slider",&slider,low,high,"",flags|ImGuiSliderFlags_NoInput)){value=slider;changed=true;}
+ ImGui::SameLine();ImGui::SetNextItemWidth(boxW);float typed=value;if(ImGui::InputFloat("##number",&typed,0,0,format)&&std::isfinite(typed)){value=clampTyped?std::clamp(typed,std::min(low,high),std::max(low,high)):typed;changed=true;}
  ImGui::EndGroup();ImGui::PopID();return changed;
 }
-inline bool valueSliderInt(const char* label,int& value,int low,int high,const char* format="%d",ImGuiSliderFlags flags=0,float width=0){
+inline bool valueSliderInt(const char* label,int& value,int low,int high,const char* format="%d",ImGuiSliderFlags flags=0,float width=0,bool clampTyped=true){
  ImGui::PushID(label);ImGui::BeginGroup();labelLine(label);bool changed=false;float spacing=ImGui::GetStyle().ItemSpacing.x,row=width>0?width:ImGui::GetContentRegionAvail().x;
- ImGui::SetNextItemWidth(std::max(40.0f,row-valueBoxWidth-spacing));int slider=value;if(ImGui::SliderInt("##slider",&slider,low,high,"",flags|ImGuiSliderFlags_NoInput)){value=slider;changed=true;}
- ImGui::SameLine();ImGui::SetNextItemWidth(valueBoxWidth);int typed=value;if(ImGui::InputScalar("##number",ImGuiDataType_S32,&typed,nullptr,nullptr,format)){value=std::clamp(typed,low,high);changed=true;}
+ float boxW=std::min(valueBoxWidth,std::max(54.0f,row*0.42f));
+ ImGui::SetNextItemWidth(std::max(40.0f,row-boxW-spacing));int slider=value;if(ImGui::SliderInt("##slider",&slider,low,high,"",flags|ImGuiSliderFlags_NoInput)){value=slider;changed=true;}
+ ImGui::SameLine();ImGui::SetNextItemWidth(boxW);int typed=value;if(ImGui::InputScalar("##number",ImGuiDataType_S32,&typed,nullptr,nullptr,format)){value=clampTyped?std::clamp(typed,std::min(low,high),std::max(low,high)):typed;changed=true;}
  ImGui::EndGroup();ImGui::PopID();return changed;
+}
+inline bool resetIconButton(const char* id,bool isDefault){
+ ImGui::PushID(id);
+ ImGui::BeginDisabled(isDefault);
+ float h=ImGui::GetFrameHeight();
+ bool clicked=ImGui::Button("##rst",{22.0f,h});
+ auto a=ImGui::GetItemRectMin();auto* draw=ImGui::GetWindowDrawList();auto ink=ImGui::GetColorU32(ImGuiCol_Text);
+ ImVec2 c{a.x+11.0f,a.y+h*0.5f};draw->PathArcTo(c,5.0f,-2.5f,2.1f,16);draw->PathStroke(ink,0,1.4f);
+ draw->AddTriangleFilled({c.x-6.0f,c.y-5.0f},{c.x,c.y-5.0f},{c.x-5.0f,c.y},ink);
+ ImGui::EndDisabled();
+ if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Reset to default");
+ ImGui::PopID();
+ return clicked;
+}
+template<typename T>
+inline bool valueSliderReset(const char* label,T& value,const T& defVal,T low,T high,const char* rstId,const char* tipText=nullptr,const char* format=nullptr,ImGuiSliderFlags flags=0,bool clampTyped=false){
+ ImGui::PushID(label);
+ auto tipIf=[&]{if(tipText&&ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))ImGui::SetTooltip("%s",tipText);};
+ labelLine(label);tipIf();
+ float spacing=ImGui::GetStyle().ItemSpacing.x,avail=ImGui::GetContentRegionAvail().x;
+ float row=std::max(100.0f,avail-22.0f-spacing),boxW=std::min(valueBoxWidth,std::max(54.0f,row*0.36f));
+ bool changed=false;
+ ImGui::SetNextItemWidth(std::max(40.0f,row-boxW-spacing));
+ if constexpr(std::is_same_v<T,int>){
+  int slider=value;if(ImGui::SliderInt("##slider",&slider,low,high,"",flags|ImGuiSliderFlags_NoInput)){value=slider;changed=true;}
+  tipIf();
+  ImGui::SameLine();ImGui::SetNextItemWidth(boxW);
+  int typed=value;if(ImGui::InputScalar("##number",ImGuiDataType_S32,&typed,nullptr,nullptr,format?format:"%d")){value=clampTyped?std::clamp(typed,std::min(low,high),std::max(low,high)):typed;changed=true;}
+ }else if constexpr(std::is_same_v<T,float>){
+  float slider=value;if(ImGui::SliderFloat("##slider",&slider,low,high,"",flags|ImGuiSliderFlags_NoInput)){value=slider;changed=true;}
+  tipIf();
+  ImGui::SameLine();ImGui::SetNextItemWidth(boxW);
+  float typed=value;if(ImGui::InputFloat("##number",&typed,0,0,format?format:"%.2f")&&std::isfinite(typed)){value=clampTyped?std::clamp(typed,std::min(low,high),std::max(low,high)):typed;changed=true;}
+ }else{
+  float slider=float(value);if(ImGui::SliderFloat("##slider",&slider,float(low),float(high),"",flags|ImGuiSliderFlags_NoInput)){value=double(slider);changed=true;}
+  tipIf();
+  ImGui::SameLine();ImGui::SetNextItemWidth(boxW);
+  double typed=value;if(ImGui::InputDouble("##number",&typed,0,0,format?format:"%.2f")&&std::isfinite(typed)){value=clampTyped?std::clamp(typed,std::min(low,high),std::max(low,high)):typed;changed=true;}
+ }
+ tipIf();
+ ImGui::SameLine();
+ if(resetIconButton(rstId,value==defVal)){value=defVal;changed=true;}
+ ImGui::PopID();
+ return changed;
 }
