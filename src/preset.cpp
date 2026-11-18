@@ -47,6 +47,8 @@ static std::optional<PresetJson> optionalPresetDefault(const std::string& path){
     if(path=="/world/continent/macroWarpStrength")return PresetJson(2.0);
     if(path=="/world/continent/coastalComplexity")return PresetJson(1.0);
     if(path=="/world/properties/worldDepth")return PresetJson(64);
+    if(path=="/world/properties/spawnX"||path=="/world/properties/spawnZ")return PresetJson(0);
+    if(path=="/world/properties/spawnType")return PresetJson("CONTINENT_CENTER");
     if(path=="/miscellaneous/snowCoversSmallPlants")return PresetJson(true);
     if(path=="/terrain/general/legacyMountainScaling")return PresetJson(true);
     if(path=="/terrain/general/mountainVariety")return PresetJson(0.0);
@@ -485,7 +487,15 @@ bool PresetEditor::resetToSaved(const std::string& path,bool history){
 bool PresetEditor::resetControl(const std::string& path){
     ImGui::PushID(path.c_str());ImGui::BeginDisabled(!canReset(path));bool clicked=ImGui::Button("##resetSaved",{22,19});auto a=ImGui::GetItemRectMin();auto* draw=ImGui::GetWindowDrawList();auto ink=ImGui::GetColorU32(ImGuiCol_Text);ImVec2 c{a.x+11,a.y+10};draw->PathArcTo(c,5,-2.5f,2.1f,16);draw->PathStroke(ink,0,1.4f);draw->AddTriangleFilled({c.x-6,c.y-5},{c.x,c.y-5},{c.x-5,c.y},ink);ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Reset to the preset's last explicit save/load");ImGui::PopID();if(clicked)pendingReset=path;return clicked;
 }
-bool PresetEditor::placeSpawn(glm::vec2 point){auto before=document.data;document.set("/world/properties/spawnX",int32_t(std::round(point.x)));document.set("/world/properties/spawnZ",int32_t(std::round(point.y)));if(document.data.contains(PresetJson::json_pointer("/world/properties/spawnType")))document.set("/world/properties/spawnType","USER_SELECTED");if(document.data==before)return false;past.push_back(std::move(before));future.clear();lastEditedPath="/world/properties/spawnZ";status="Placed preset spawn";return true;}
+bool PresetEditor::placeSpawn(glm::vec2 point){
+    if(!document.loaded()){status="Import or create a preset before setting spawn.";return false;}
+    auto before=document.data;
+    document.set("/world/properties/spawnX",int32_t(std::round(point.x)));
+    document.set("/world/properties/spawnZ",int32_t(std::round(point.y)));
+    if(document.data.contains(PresetJson::json_pointer("/world/properties/spawnType")))document.set("/world/properties/spawnType","USER_SELECTED");
+    if(document.data==before)return false;
+    past.push_back(std::move(before));future.clear();lastEditedPath="/world/properties/spawnZ";status="Placed preset spawn";return true;
+}
 
 // Reuse undo/redo so jumping retains every intermediate state and its redo branch.
 bool PresetEditor::jumpHistory(size_t index){
